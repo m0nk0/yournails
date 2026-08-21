@@ -51,19 +51,10 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
           'before_${widget.client.id}',
         );
 
-        final session = await DatabaseService.addSession(
+        await DatabaseService.addSessionWithPhotos(
           clientId: widget.client.id,
-          note: 'Новый визит',
-        );
-
-        final updatedSession = NailSession(
-          id: session.id,
-          clientId: session.clientId,
           beforePhotoPath: savedPath,
-          note: session.note,
-          createdAt: session.createdAt,
         );
-        await DatabaseService.updateSession(updatedSession);
 
         _loadSessions();
 
@@ -90,7 +81,7 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     }
   }
 
-  /// Добавить фото "после" к существующей сессии
+  /// Добавить фото "после"
   Future<void> _addAfterPhoto(NailSession session) async {
     final source = await _showSourceDialog();
     if (source == null) return;
@@ -113,6 +104,7 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
           id: session.id,
           clientId: session.clientId,
           beforePhotoPath: session.beforePhotoPath,
+          tryOnPhotoPath: session.tryOnPhotoPath,
           afterPhotoPath: savedPath,
           note: session.note,
           createdAt: session.createdAt,
@@ -144,7 +136,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     }
   }
 
-  /// Диалог выбора источника фото
   Future<ImageSource?> _showSourceDialog() async {
     return showDialog<ImageSource>(
       context: context,
@@ -169,7 +160,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     );
   }
 
-  /// Удалить визит
   Future<void> _deleteSession(NailSession session) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -199,7 +189,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     }
   }
 
-  /// Открыть фото на весь экран (с передачей сессии для шаблона)
   void _openPhotoView(String photoPath, String title, NailSession session) {
     Navigator.push(
       context,
@@ -288,7 +277,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
                   ),
           ),
 
-          // Индикатор загрузки
           if (_isLoading)
             const Padding(
               padding: EdgeInsets.all(16),
@@ -304,7 +292,7 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     );
   }
 
-  /// Карточка визита с фото до/после
+  /// Карточка визита с 3 фото: До / Примерка / После
   Widget _buildSessionCard(NailSession session) {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -313,7 +301,7 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Заголовок с датой и кнопкой удаления
+            // Заголовок
             Row(
               children: [
                 Expanded(
@@ -343,116 +331,37 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
             ),
             const SizedBox(height: 12),
 
-            // Фото до и после
+            // 3 фото: До / Примерка / После
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Фото "до"
                 Expanded(
-                  child: Column(
-                    children: [
-                      const Text(
-                        'До',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      AspectRatio(
-                        aspectRatio: 1,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: session.hasBefore
-                              ? GestureDetector(
-                                  onTap: () => _openPhotoView(
-                                    session.beforePhotoPath!,
-                                    'До',
-                                    session,
-                                  ),
-                                  child: Image.file(
-                                    File(session.beforePhotoPath!),
-                                    width: double.infinity,
-                                    height: double.infinity,
-                                    fit: BoxFit.cover,
-                                  ),
-                                )
-                              : Container(
-                                  width: double.infinity,
-                                  height: double.infinity,
-                                  color: Colors.grey[200],
-                                  child: const Icon(Icons.photo, color: Colors.grey, size: 40),
-                                ),
-                        ),
-                      ),
-                    ],
+                  child: _buildPhotoColumn(
+                    'До',
+                    session.hasBefore,
+                    session.beforePhotoPath,
+                    session,
+                    null,
                   ),
                 ),
-                const SizedBox(width: 12),
-
-                // Фото "после"
+                const SizedBox(width: 8),
                 Expanded(
-                  child: Column(
-                    children: [
-                      const Text(
-                        'После',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      AspectRatio(
-                        aspectRatio: 1,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: session.hasAfter
-                              ? GestureDetector(
-                                  onTap: () => _openPhotoView(
-                                    session.afterPhotoPath!,
-                                    'После',
-                                    session,
-                                  ),
-                                  child: Image.file(
-                                    File(session.afterPhotoPath!),
-                                    width: double.infinity,
-                                    height: double.infinity,
-                                    fit: BoxFit.cover,
-                                  ),
-                                )
-                              : GestureDetector(
-                                  onTap: () => _addAfterPhoto(session),
-                                  child: Container(
-                                    width: double.infinity,
-                                    height: double.infinity,
-                                    decoration: BoxDecoration(
-                                      color: Colors.pink[50],
-                                      border: Border.all(
-                                        color: Colors.pink,
-                                        width: 2,
-                                        style: BorderStyle.solid,
-                                      ),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.add_a_photo, color: Colors.pink, size: 40),
-                                        SizedBox(height: 6),
-                                        Text(
-                                          'Добавить',
-                                          style: TextStyle(
-                                            color: Colors.pink,
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ],
+                  child: _buildPhotoColumn(
+                    'Примерка',
+                    session.hasTryOn,
+                    session.tryOnPhotoPath,
+                    session,
+                    null,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildPhotoColumn(
+                    'После',
+                    session.hasAfter,
+                    session.afterPhotoPath,
+                    session,
+                    () => _addAfterPhoto(session),
                   ),
                 ),
               ],
@@ -463,7 +372,78 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     );
   }
 
-  /// Форматирование даты
+  /// Колонка с фото
+  Widget _buildPhotoColumn(
+    String label,
+    bool hasPhoto,
+    String? photoPath,
+    NailSession session,
+    VoidCallback? onEmptyTap,
+  ) {
+    return Column(
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+        ),
+        const SizedBox(height: 8),
+        AspectRatio(
+          aspectRatio: 1,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: hasPhoto
+                ? GestureDetector(
+                    onTap: () => _openPhotoView(photoPath!, label, session),
+                    child: Image.file(
+                      File(photoPath!),
+                      width: double.infinity,
+                      height: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
+                  )
+                : onEmptyTap != null
+                    ? GestureDetector(
+                        onTap: onEmptyTap,
+                        child: Container(
+                          width: double.infinity,
+                          height: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.pink[50],
+                            border: Border.all(color: Colors.pink, width: 2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.add_a_photo, color: Colors.pink, size: 32),
+                              SizedBox(height: 4),
+                              Text(
+                                'Добавить',
+                                style: TextStyle(
+                                  color: Colors.pink,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : Container(
+                        width: double.infinity,
+                        height: double.infinity,
+                        color: Colors.grey[200],
+                        child: const Icon(Icons.remove, color: Colors.grey, size: 32),
+                      ),
+          ),
+        ),
+      ],
+    );
+  }
+
   String _formatDate(DateTime date) {
     final months = [
       'янв', 'фев', 'мар', 'апр', 'мая', 'июн',

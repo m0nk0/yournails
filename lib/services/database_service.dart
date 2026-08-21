@@ -6,7 +6,6 @@ import '../models/client.dart';
 import '../models/nail_session.dart';
 
 /// Сервис работы с локальной базой данных.
-/// Использует Hive для хранения данных и файловую систему для фото.
 class DatabaseService {
   static const String _clientsBox = 'clients';
   static const String _sessionsBox = 'sessions';
@@ -14,7 +13,7 @@ class DatabaseService {
   static late Box _clients;
   static late Box _sessions;
 
-  /// Инициализация БД (вызывается в main.dart)
+  /// Инициализация БД
   static Future<void> init() async {
     await Hive.initFlutter();
     _clients = await Hive.openBox(_clientsBox);
@@ -23,7 +22,6 @@ class DatabaseService {
 
   // ============ КЛИЕНТЫ ============
 
-  /// Добавить клиента
   static Future<Client> addClient({required String name, String? phone}) async {
     final client = Client(
       id: const Uuid().v4(),
@@ -35,7 +33,6 @@ class DatabaseService {
     return client;
   }
 
-  /// Получить всех клиентов (отсортированных по дате)
   static List<Client> getClients() {
     final list = <Client>[];
     for (final key in _clients.keys) {
@@ -48,17 +45,14 @@ class DatabaseService {
     return list;
   }
 
-  /// Получить клиента по id
   static Client? getClient(String id) {
     final map = _clients.get(id);
     if (map == null) return null;
     return Client.fromMap(Map<String, dynamic>.from(map));
   }
 
-  /// Удалить клиента
   static Future<void> deleteClient(String id) async {
     await _clients.delete(id);
-    // Удаляем все сессии клиента
     final sessions = getSessionsByClient(id);
     for (final session in sessions) {
       await deleteSession(session.id);
@@ -67,7 +61,6 @@ class DatabaseService {
 
   // ============ СЕССИИ ============
 
-  /// Добавить сессию
   static Future<NailSession> addSession({
     required String clientId,
     String? note,
@@ -82,7 +75,27 @@ class DatabaseService {
     return session;
   }
 
-  /// Получить сессии клиента
+  /// НОВОЕ: Создать сессию сразу с фото
+  static Future<NailSession> addSessionWithPhotos({
+    required String clientId,
+    String? beforePhotoPath,
+    String? tryOnPhotoPath,
+    String? afterPhotoPath,
+    String? note,
+  }) async {
+    final session = NailSession(
+      id: const Uuid().v4(),
+      clientId: clientId,
+      beforePhotoPath: beforePhotoPath,
+      tryOnPhotoPath: tryOnPhotoPath,
+      afterPhotoPath: afterPhotoPath,
+      note: note,
+      createdAt: DateTime.now(),
+    );
+    await _sessions.put(session.id, session.toMap());
+    return session;
+  }
+
   static List<NailSession> getSessionsByClient(String clientId) {
     final list = <NailSession>[];
     for (final key in _sessions.keys) {
@@ -98,24 +111,24 @@ class DatabaseService {
     return list;
   }
 
-  /// Обновить сессию (добавить фото)
   static Future<void> updateSession(NailSession session) async {
     await _sessions.put(session.id, session.toMap());
   }
 
-  /// Удалить сессию
   static Future<void> deleteSession(String id) async {
     final map = _sessions.get(id);
     if (map != null) {
       final session = NailSession.fromMap(Map<String, dynamic>.from(map));
-      // Удаляем файлы фото
-      if (session.beforePhotoPath != null) {
-        final file = File(session.beforePhotoPath!);
-        if (await file.exists()) await file.delete();
-      }
-      if (session.afterPhotoPath != null) {
-        final file = File(session.afterPhotoPath!);
-        if (await file.exists()) await file.delete();
+      // Удаляем все файлы фото
+      for (final path in [
+        session.beforePhotoPath,
+        session.tryOnPhotoPath,
+        session.afterPhotoPath,
+      ]) {
+        if (path != null) {
+          final file = File(path);
+          if (await file.exists()) await file.delete();
+        }
       }
     }
     await _sessions.delete(id);
@@ -124,7 +137,6 @@ class DatabaseService {
   // ============ ФОТО ============
 
   /// Сохранить фото в постоянное хранилище приложения.
-  /// Возвращает путь к сохраненному файлу.
   static Future<String> savePhoto(File sourceFile, String prefix) async {
     final appDir = await getApplicationDocumentsDirectory();
     final photosDir = Directory('${appDir.path}/photos');
@@ -133,7 +145,7 @@ class DatabaseService {
       await photosDir.create(recursive: true);
     }
 
-    final fileName = '${prefix}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final fileName = '${prefix}_${DateTime.now().millisecondsSinceEpoch}.png';
     final savedFile = await sourceFile.copy('${photosDir.path}/$fileName');
     return savedFile.path;
   }

@@ -25,7 +25,6 @@ class _ClientsScreenState extends State<ClientsScreen> {
     });
   }
 
-  /// Диалог добавления клиента
   Future<void> _showAddClientDialog() async {
     final nameController = TextEditingController();
     final phoneController = TextEditingController();
@@ -78,7 +77,6 @@ class _ClientsScreenState extends State<ClientsScreen> {
     }
   }
 
-  /// Удалить клиента
   Future<void> _deleteClient(Client client) async {
     final confirmed = await showDialog<bool>(
       context: context,

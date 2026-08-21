@@ -25,7 +25,6 @@ class HomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 40),
 
-            // Кнопка: Примерка
             ElevatedButton.icon(
               onPressed: () {
                 Navigator.push(
@@ -41,12 +40,12 @@ class HomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // НОВОЕ: Кнопка Клиенты
+            // ИСПРАВЛЕНО: убран const
             OutlinedButton.icon(
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const ClientsScreen()),
+                  MaterialPageRoute(builder: (_) => ClientsScreen()),
                 );
               },
               icon: const Icon(Icons.people),

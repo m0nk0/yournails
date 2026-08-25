@@ -5,6 +5,7 @@ import '../models/client.dart';
 import '../models/nail_session.dart';
 import '../services/database_service.dart';
 import 'photo_view_screen.dart';
+import '../widgets/home_app_bar.dart';
 
 class ClientDetailScreen extends StatefulWidget {
   final Client client;
@@ -205,13 +206,11 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+            appBar: HomeAppBar(
         title: Text(
           widget.client.name,
           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Colors.white,
       ),
       body: Column(
         children: [

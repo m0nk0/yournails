@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/nail_zone.dart';
 import '../models/selected_design.dart';
 import '../models/nail_shape.dart';
+import '../widgets/home_app_bar.dart';
 import 'result_screen.dart';
 import 'design_selection_screen.dart';
 
@@ -17,37 +18,17 @@ class EditScreen extends StatefulWidget {
 }
 
 class _EditScreenState extends State<EditScreen> {
-  // Позиция центра рамки
   Offset _frameCenter = Offset.zero;
-
-  // Ширина и высота рамки
   double _frameWidth = 100;
   double _frameHeight = 140;
-
-  // Поворот рамки в градусах
   double _rotation = 0.0;
-
-  // Смещение фото
   Offset _imageOffset = Offset.zero;
-
-  // Масштаб фото
   double _imageScale = 1.0;
-
-  // Базовый масштаб для плавного зума
   double _baseScale = 1.0;
-
-  // Выбранный дизайн (цвет + материал)
   SelectedDesign? _selectedDesign;
-
-  // Форма ногтя
   NailShape _shape = NailShape.oval;
-
-  // НОВОЕ: Слои лака (1-3)
   double _density = 2.0;
-
-  // НОВОЕ: Яркость (0.7-1.3)
   double _brightness = 1.0;
-
   bool _initialized = false;
 
   @override
@@ -76,7 +57,15 @@ class _EditScreenState extends State<EditScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => DesignSelectionScreen(
-          currentDesign: _selectedDesign ?? SelectedDesign(),
+          currentDesign: SelectedDesign(
+            color: _selectedDesign?.color,
+            material: _selectedDesign?.material,
+            shape: _shape,
+            density: _density,
+            brightness: _brightness,
+            patternPath: _selectedDesign?.patternPath,
+            patternName: _selectedDesign?.patternName,
+          ),
         ),
       ),
     );
@@ -84,6 +73,9 @@ class _EditScreenState extends State<EditScreen> {
     if (result != null && result is SelectedDesign) {
       setState(() {
         _selectedDesign = result;
+        _shape = result.shape;
+        _density = result.density;
+        _brightness = result.brightness;
       });
     }
   }
@@ -115,6 +107,8 @@ class _EditScreenState extends State<EditScreen> {
       shape: _shape,
       density: _density,
       brightness: _brightness,
+      patternPath: _selectedDesign!.patternPath,
+      patternName: _selectedDesign!.patternName,
     );
 
     Navigator.push(
@@ -131,11 +125,9 @@ class _EditScreenState extends State<EditScreen> {
     );
   }
 
-  /// Виджет превью дизайна в рамке
   Widget _buildNailPreview() {
     final borderRadius = NailShapeHelper.getBorderRadius(_shape, _frameWidth, _frameHeight);
 
-    // Если дизайн не выбран — пустая рамка
     if (_selectedDesign == null || !_selectedDesign!.hasColor) {
       return Container(
         width: _frameWidth,
@@ -151,13 +143,14 @@ class _EditScreenState extends State<EditScreen> {
       );
     }
 
-    // Собираем временный дизайн с текущими слоями и яркостью
     final renderDesign = SelectedDesign(
       color: _selectedDesign!.color,
       material: _selectedDesign!.material,
       shape: _shape,
       density: _density,
       brightness: _brightness,
+      patternPath: _selectedDesign!.patternPath,
+      patternName: _selectedDesign!.patternName,
     );
     final render = renderDesign.getRender();
     final material = _selectedDesign!.material;
@@ -173,14 +166,22 @@ class _EditScreenState extends State<EditScreen> {
         borderRadius: borderRadius,
         child: Stack(
           children: [
-            // Итоговый цвет с прозрачностью
             Positioned.fill(
               child: Opacity(
                 opacity: render.opacity,
                 child: Container(color: render.color),
               ),
             ),
-            // Мягкий глянец
+            if (renderDesign.hasPattern)
+              Positioned.fill(
+                child: Image.file(
+                  File(renderDesign.patternPath!),
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return const SizedBox.shrink();
+                  },
+                ),
+              ),
             if (material?.hasGloss ?? false)
               Positioned.fill(
                 child: Container(
@@ -207,14 +208,11 @@ class _EditScreenState extends State<EditScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Настройка'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Colors.white,
+      appBar: const HomeAppBar(
+        title: Text('Настройка', style: TextStyle(fontSize: 22)),
       ),
       body: Stack(
         children: [
-          // Фото с pinch-to-zoom и перемещением
           Positioned.fill(
             child: GestureDetector(
               onScaleStart: _onPhotoScaleStart,
@@ -234,7 +232,6 @@ class _EditScreenState extends State<EditScreen> {
             ),
           ),
 
-          // Подсказка о жестах
           Positioned(
             top: 16,
             left: 0,
@@ -254,7 +251,6 @@ class _EditScreenState extends State<EditScreen> {
             ),
           ),
 
-          // Рамка с формой ногтя
           Positioned(
             left: _frameCenter.dx - _frameWidth / 2,
             top: _frameCenter.dy - _frameHeight / 2,
@@ -271,7 +267,6 @@ class _EditScreenState extends State<EditScreen> {
             ),
           ),
 
-          // Панель управления
           Positioned(
             bottom: 0,
             left: 0,
@@ -283,7 +278,6 @@ class _EditScreenState extends State<EditScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Кнопка выбора дизайна
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
@@ -304,7 +298,6 @@ class _EditScreenState extends State<EditScreen> {
                     ),
                     const SizedBox(height: 8),
 
-                    // Выбор формы ногтя
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: NailShape.values.map((shape) {
@@ -352,7 +345,6 @@ class _EditScreenState extends State<EditScreen> {
                     ),
                     const SizedBox(height: 8),
 
-                    // НОВОЕ: Ползунок СЛОИ
                     Row(
                       children: [
                         const Icon(Icons.layers, color: Colors.white, size: 18),
@@ -378,7 +370,6 @@ class _EditScreenState extends State<EditScreen> {
                       ],
                     ),
 
-                    // НОВОЕ: Ползунок ЯРКОСТЬ
                     Row(
                       children: [
                         const Icon(Icons.brightness_6, color: Colors.white, size: 18),
@@ -403,7 +394,6 @@ class _EditScreenState extends State<EditScreen> {
                       ],
                     ),
 
-                    // Ползунок ШИРИНЫ
                     Row(
                       children: [
                         const Icon(Icons.swap_horiz, color: Colors.white, size: 18),
@@ -422,7 +412,6 @@ class _EditScreenState extends State<EditScreen> {
                       ],
                     ),
 
-                    // Ползунок ВЫСОТЫ
                     Row(
                       children: [
                         const Icon(Icons.swap_vert, color: Colors.white, size: 18),
@@ -441,7 +430,6 @@ class _EditScreenState extends State<EditScreen> {
                       ],
                     ),
 
-                    // Ползунок ПОВОРОТА
                     Row(
                       children: [
                         const Icon(Icons.rotate_right, color: Colors.white, size: 18),
@@ -462,7 +450,6 @@ class _EditScreenState extends State<EditScreen> {
 
                     const SizedBox(height: 8),
 
-                    // Кнопка Далее
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(

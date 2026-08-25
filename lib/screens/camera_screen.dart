@@ -1,115 +1,104 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import '../widgets/home_app_bar.dart';
 import 'edit_screen.dart';
 
-class CameraScreen extends StatefulWidget {
+class CameraScreen extends StatelessWidget {
   const CameraScreen({super.key});
 
-  @override
-  State<CameraScreen> createState() => _CameraScreenState();
-}
-
-class _CameraScreenState extends State<CameraScreen> {
-  final ImagePicker _picker = ImagePicker();
-
-  /// Выбор фото из галереи
-  Future<void> _pickFromGallery() async {
-    try {
-      final XFile? pickedFile = await _picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 80,
-      );
-
-      if (pickedFile != null) {
-        _navigateToEdit(File(pickedFile.path));
-      }
-    } catch (e) {
-      _showError('Ошибка при выборе фото: $e');
-    }
-  }
-
-  /// Сделать фото камерой
-  Future<void> _takePhoto() async {
-    try {
-      final XFile? photo = await _picker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 80,
-      );
-
-      if (photo != null) {
-        _navigateToEdit(File(photo.path));
-      }
-    } catch (e) {
-      _showError('Ошибка камеры: $e');
-    }
-  }
-
-  /// Переход к редактору
-  void _navigateToEdit(File imageFile) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => EditScreen(imageFile: imageFile),
-      ),
+  Future<void> _pickImage(BuildContext context, ImageSource source) async {
+    final picker = ImagePicker();
+    final XFile? photo = await picker.pickImage(
+      source: source,
+      imageQuality: 80,
     );
-  }
 
-  /// Показать ошибку
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-      ),
-    );
+    if (photo != null && context.mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => EditScreen(imageFile: File(photo.path)),
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Сделай фото'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Colors.white,
+      appBar: const HomeAppBar(
+        title: Text('Фото пальца', style: TextStyle(fontSize: 22)),
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.photo_camera, size: 100, color: Colors.grey),
-              const SizedBox(height: 20),
-              const Text(
-                'Сфотографируй палец крупным планом\nили выбери фото из галереи',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16, color: Colors.grey),
-              ),
-              const SizedBox(height: 40),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.fingerprint, size: 100, color: Colors.pink),
+            const SizedBox(height: 16),
+            const Text(
+              'Сфотографируйте палец клиента',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Лучше при дневном свете, ноготь целиком в кадре',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 40),
 
-              // Кнопка: Сделать фото
-              ElevatedButton.icon(
-                onPressed: _takePhoto,
-                icon: const Icon(Icons.camera_alt),
-                label: const Text('Сделать фото'),
+            SizedBox(
+              width: double.infinity,
+              height: 90,
+              child: ElevatedButton.icon(
+                onPressed: () => _pickImage(context, ImageSource.camera),
+                icon: const Icon(Icons.camera_alt, size: 40, color: Colors.white),
+                label: const Text(
+                  'Сделать фото',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
                 style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  backgroundColor: Colors.pink,
+                  elevation: 6,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
                 ),
               ),
-              const SizedBox(height: 16),
+            ),
+            const SizedBox(height: 16),
 
-              // Кнопка: Из галереи
-              OutlinedButton.icon(
-                onPressed: _pickFromGallery,
-                icon: const Icon(Icons.photo_library),
-                label: const Text('Выбрать из галереи'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 90,
+              child: ElevatedButton.icon(
+                onPressed: () => _pickImage(context, ImageSource.gallery),
+                icon: const Icon(Icons.photo_library, size: 40, color: Colors.white),
+                label: const Text(
+                  'Из галереи',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepPurple,
+                  elevation: 6,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

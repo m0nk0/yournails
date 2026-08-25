@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/nail_session.dart';
+import '../widgets/home_app_bar.dart';
 
 class TemplateScreen extends StatefulWidget {
   final NailSession session;
@@ -73,10 +74,8 @@ class _TemplateScreenState extends State<TemplateScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Шаблон для соцсетей', style: TextStyle(fontSize: 22)),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Colors.white,
+            appBar: const HomeAppBar(
+        title: Text('Шаблон для соцсетей', style: TextStyle(fontSize: 22)),
       ),
       body: Column(
         children: [

@@ -4,11 +4,14 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 import '../models/client.dart';
 import '../models/nail_zone.dart';
 import '../models/selected_design.dart';
 import '../models/nail_shape.dart';
+import '../models/my_design.dart';
 import '../services/database_service.dart';
+import '../widgets/home_app_bar.dart';
 
 class ResultScreen extends StatefulWidget {
   final File imageFile;
@@ -37,7 +40,60 @@ class _ResultScreenState extends State<ResultScreen> {
   NailZone get zone => widget.zone;
   SelectedDesign get design => widget.design;
 
-  /// Выбор клиента или создание нового
+  Future<void> _saveToCollection() async {
+    final nameController = TextEditingController(
+      text: '${design.color?.name ?? 'Дизайн'} • ${NailShapeHelper.getName(design.shape)}',
+    );
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('В коллекцию', style: TextStyle(fontSize: 20)),
+        content: TextField(
+          controller: nameController,
+          decoration: const InputDecoration(
+            labelText: 'Название дизайна',
+            hintText: 'Бордовый глянец квадрат',
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Сохранить'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok == true && nameController.text.trim().isNotEmpty) {
+      await DatabaseService.addMyDesign(MyDesign(
+        id: const Uuid().v4(),
+        name: nameController.text.trim(),
+        type: MyDesignType.recipe,
+        colorId: design.color?.id,
+        materialId: design.material?.id,
+        shapeName: design.shape.name,
+        density: design.density,
+        brightness: design.brightness,
+        createdAt: DateTime.now(),
+      ));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Дизайн сохранён в коллекцию'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
+  }
+
   Future<Client?> _selectOrCreateClient() async {
     final clients = DatabaseService.getClients();
 
@@ -88,7 +144,6 @@ class _ResultScreenState extends State<ResultScreen> {
     return selected;
   }
 
-  /// Создание нового клиента
   Future<Client?> _createNewClient() async {
     final nameController = TextEditingController();
 
@@ -123,19 +178,16 @@ class _ResultScreenState extends State<ResultScreen> {
     return null;
   }
 
-  /// Сохранить примерку клиенту
   Future<void> _saveToClient() async {
     setState(() => _isSaving = true);
 
     try {
-      // 1. Выбираем клиента
       final client = await _selectOrCreateClient();
       if (client == null) {
         setState(() => _isSaving = false);
         return;
       }
 
-      // 2. Рендерим примерку в изображение
       final boundary = _repaintBoundaryKey.currentContext!.findRenderObject()
           as RenderRepaintBoundary;
       final image = await boundary.toImage(pixelRatio: 3.0);
@@ -148,11 +200,9 @@ class _ResultScreenState extends State<ResultScreen> {
       final tryOnPath = await DatabaseService.savePhoto(tempFile, 'tryon_${client.id}');
       await tempFile.delete();
 
-      // 3. Сохраняем исходное фото как "до"
       final beforePath =
           await DatabaseService.savePhoto(widget.imageFile, 'before_${client.id}');
 
-      // 4. Создаём сессию
       await DatabaseService.addSessionWithPhotos(
         clientId: client.id,
         beforePhotoPath: beforePath,
@@ -188,20 +238,15 @@ class _ResultScreenState extends State<ResultScreen> {
     final borderRadius = NailShapeHelper.getBorderRadius(design.shape, zone.width, zone.height);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Результат'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Colors.white,
+      appBar: const HomeAppBar(
+        title: Text('Результат', style: TextStyle(fontSize: 22)),
       ),
-      // ИСПРАВЛЕНО: Stack на весь экран, как в EditScreen
       body: Stack(
         children: [
-          // Область рендеринга (фото + дизайн) на весь экран
           RepaintBoundary(
             key: _repaintBoundaryKey,
             child: Stack(
               children: [
-                // Фото на весь экран (та же геометрия, что в EditScreen)
                 Positioned.fill(
                   child: Transform.translate(
                     offset: widget.imageOffset,
@@ -215,7 +260,6 @@ class _ResultScreenState extends State<ResultScreen> {
                   ),
                 ),
 
-                // Наложение дизайна
                 Positioned(
                   left: zone.x - zone.width / 2,
                   top: zone.y - zone.height / 2,
@@ -234,6 +278,16 @@ class _ResultScreenState extends State<ResultScreen> {
                                 child: Container(color: render.color),
                               ),
                             ),
+                            if (design.hasPattern)
+                              Positioned.fill(
+                                child: Image.file(
+                                  File(design.patternPath!),
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return const SizedBox.shrink();
+                                  },
+                                ),
+                              ),
                             if (material?.hasGloss ?? false)
                               Positioned.fill(
                                 child: Container(
@@ -263,7 +317,6 @@ class _ResultScreenState extends State<ResultScreen> {
             ),
           ),
 
-          // Нижняя панель ПОВЕРХ фото (не влияет на геометрию)
           Positioned(
             bottom: 0,
             left: 0,
@@ -331,6 +384,20 @@ class _ResultScreenState extends State<ResultScreen> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _saveToCollection,
+                      icon: const Icon(Icons.bookmark_add),
+                      label: const Text('В коллекцию'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Colors.white54),
+                      ),
+                    ),
                   ),
                 ],
               ),

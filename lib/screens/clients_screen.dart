@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/client.dart';
 import '../services/database_service.dart';
+import '../widgets/home_app_bar.dart';
 import 'client_detail_screen.dart';
 
 class ClientsScreen extends StatefulWidget {
@@ -32,7 +33,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Новый клиент'),
+        title: const Text('Новый клиент', style: TextStyle(fontSize: 20)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -58,11 +59,11 @@ class _ClientsScreenState extends State<ClientsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена'),
+            child: const Text('Отмена', style: TextStyle(fontSize: 16)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Добавить'),
+            child: const Text('Добавить', style: TextStyle(fontSize: 16)),
           ),
         ],
       ),
@@ -71,7 +72,8 @@ class _ClientsScreenState extends State<ClientsScreen> {
     if (result == true && nameController.text.trim().isNotEmpty) {
       await DatabaseService.addClient(
         name: nameController.text.trim(),
-        phone: phoneController.text.trim().isEmpty ? null : phoneController.text.trim(),
+        phone:
+            phoneController.text.trim().isEmpty ? null : phoneController.text.trim(),
       );
       _loadClients();
     }
@@ -81,17 +83,20 @@ class _ClientsScreenState extends State<ClientsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Удалить клиента?'),
-        content: Text('Все данные клиента "${client.name}" будут удалены.'),
+        title: const Text('Удалить клиента?', style: TextStyle(fontSize: 20)),
+        content: Text(
+          'Все данные клиента "${client.name}" будут удалены.',
+          style: const TextStyle(fontSize: 16),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена'),
+            child: const Text('Отмена', style: TextStyle(fontSize: 16)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Удалить'),
+            child: const Text('Удалить', style: TextStyle(fontSize: 16)),
           ),
         ],
       ),
@@ -106,10 +111,8 @@ class _ClientsScreenState extends State<ClientsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Клиенты'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Colors.white,
+      appBar: const HomeAppBar(
+        title: Text('Клиенты', style: TextStyle(fontSize: 22)),
       ),
       body: _clients.isEmpty
           ? const Center(
@@ -145,8 +148,11 @@ class _ClientsScreenState extends State<ClientsScreen> {
                         style: const TextStyle(color: Colors.white),
                       ),
                     ),
-                    title: Text(client.name),
-                    subtitle: Text(client.phone ?? 'Телефон не указан'),
+                    title: Text(client.name, style: const TextStyle(fontSize: 18)),
+                    subtitle: Text(
+                      client.phone ?? 'Телефон не указан',
+                      style: const TextStyle(fontSize: 14),
+                    ),
                     trailing: IconButton(
                       icon: const Icon(Icons.delete_outline, color: Colors.red),
                       onPressed: () => _deleteClient(client),

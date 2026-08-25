@@ -4,24 +4,30 @@ import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../models/client.dart';
 import '../models/nail_session.dart';
+import '../models/my_design.dart';
 
 /// Сервис работы с локальной базой данных.
+/// Использует Hive для хранения данных и файловую систему для фото.
 class DatabaseService {
   static const String _clientsBox = 'clients';
   static const String _sessionsBox = 'sessions';
+  static const String _myDesignsBox = 'my_designs';
 
   static late Box _clients;
   static late Box _sessions;
+  static late Box _myDesigns;
 
-  /// Инициализация БД
+  /// Инициализация БД (вызывается в main.dart)
   static Future<void> init() async {
     await Hive.initFlutter();
     _clients = await Hive.openBox(_clientsBox);
     _sessions = await Hive.openBox(_sessionsBox);
+    _myDesigns = await Hive.openBox(_myDesignsBox);
   }
 
   // ============ КЛИЕНТЫ ============
 
+  /// Добавить клиента
   static Future<Client> addClient({required String name, String? phone}) async {
     final client = Client(
       id: const Uuid().v4(),
@@ -33,6 +39,7 @@ class DatabaseService {
     return client;
   }
 
+  /// Получить всех клиентов (отсортированных по дате)
   static List<Client> getClients() {
     final list = <Client>[];
     for (final key in _clients.keys) {
@@ -45,14 +52,17 @@ class DatabaseService {
     return list;
   }
 
+  /// Получить клиента по id
   static Client? getClient(String id) {
     final map = _clients.get(id);
     if (map == null) return null;
     return Client.fromMap(Map<String, dynamic>.from(map));
   }
 
+  /// Удалить клиента
   static Future<void> deleteClient(String id) async {
     await _clients.delete(id);
+    // Удаляем все сессии клиента
     final sessions = getSessionsByClient(id);
     for (final session in sessions) {
       await deleteSession(session.id);
@@ -61,6 +71,7 @@ class DatabaseService {
 
   // ============ СЕССИИ ============
 
+  /// Добавить сессию
   static Future<NailSession> addSession({
     required String clientId,
     String? note,
@@ -75,7 +86,7 @@ class DatabaseService {
     return session;
   }
 
-  /// НОВОЕ: Создать сессию сразу с фото
+  /// Создать сессию сразу с фото
   static Future<NailSession> addSessionWithPhotos({
     required String clientId,
     String? beforePhotoPath,
@@ -96,6 +107,7 @@ class DatabaseService {
     return session;
   }
 
+  /// Получить сессии клиента
   static List<NailSession> getSessionsByClient(String clientId) {
     final list = <NailSession>[];
     for (final key in _sessions.keys) {
@@ -111,10 +123,12 @@ class DatabaseService {
     return list;
   }
 
+  /// Обновить сессию (добавить фото)
   static Future<void> updateSession(NailSession session) async {
     await _sessions.put(session.id, session.toMap());
   }
 
+  /// Удалить сессию
   static Future<void> deleteSession(String id) async {
     final map = _sessions.get(id);
     if (map != null) {
@@ -134,9 +148,44 @@ class DatabaseService {
     await _sessions.delete(id);
   }
 
+  // ============ МОИ ДИЗАЙНЫ (коллекция) ============
+
+  /// Добавить дизайн в коллекцию
+  static Future<void> addMyDesign(MyDesign design) async {
+    await _myDesigns.put(design.id, design.toMap());
+  }
+
+  /// Получить все дизайны коллекции
+  static List<MyDesign> getMyDesigns() {
+    final list = <MyDesign>[];
+    for (final key in _myDesigns.keys) {
+      final map = _myDesigns.get(key);
+      if (map != null) {
+        list.add(MyDesign.fromMap(Map<String, dynamic>.from(map)));
+      }
+    }
+    list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return list;
+  }
+
+  /// Удалить дизайн из коллекции
+  static Future<void> deleteMyDesign(String id) async {
+    final map = _myDesigns.get(id);
+    if (map != null) {
+      final design = MyDesign.fromMap(Map<String, dynamic>.from(map));
+      // Если картинка — удаляем файл
+      if (design.imagePath != null) {
+        final file = File(design.imagePath!);
+        if (await file.exists()) await file.delete();
+      }
+    }
+    await _myDesigns.delete(id);
+  }
+
   // ============ ФОТО ============
 
   /// Сохранить фото в постоянное хранилище приложения.
+  /// Возвращает путь к сохраненному файлу.
   static Future<String> savePhoto(File sourceFile, String prefix) async {
     final appDir = await getApplicationDocumentsDirectory();
     final photosDir = Directory('${appDir.path}/photos');

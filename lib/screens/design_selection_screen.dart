@@ -6,11 +6,14 @@ import '../models/nail_color.dart';
 import '../models/nail_material.dart';
 import '../models/selected_design.dart';
 import '../models/nail_shape.dart';
+import '../models/nail_pattern.dart';
 import '../models/my_design.dart';
 import '../services/design_sets_service.dart';
 import '../services/database_service.dart';
+import '../widgets/nail_pattern_layer.dart';
 import 'color_picker_screen.dart';
 import 'material_picker_screen.dart';
+import 'pattern_picker_screen.dart';
 
 class DesignSelectionScreen extends StatefulWidget {
   final SelectedDesign currentDesign;
@@ -55,26 +58,25 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
     return null;
   }
 
-  /// Применить дизайн из коллекции
   void _applyMyDesign(MyDesign d) {
     setState(() {
       if (d.isRecipe) {
-        // Рецепт: применяем все параметры
         _design = SelectedDesign(
           color: _findColor(d.colorId),
           material: _findMaterial(d.materialId),
           shape: d.shape,
           density: d.density,
           brightness: d.brightness,
+          pattern: d.pattern,
         );
       } else {
-        // Картинка: накладываем паттерн
         _design = SelectedDesign(
           color: _design.color,
           material: _design.material,
           shape: _design.shape,
           density: _design.density,
           brightness: _design.brightness,
+          pattern: _design.pattern,
           patternPath: d.imagePath,
           patternName: d.name,
         );
@@ -88,7 +90,6 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
     );
   }
 
-  /// Удалить дизайн из коллекции
   Future<void> _deleteMyDesign(MyDesign d) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -115,7 +116,6 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
     }
   }
 
-  /// Загрузить PNG/фото из галереи или камеры
   Future<void> _uploadImage() async {
     final source = await showDialog<ImageSource>(
       context: context,
@@ -179,7 +179,6 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
     }
   }
 
-  /// Открыть выбор цвета
   Future<void> _openColorPicker() async {
     final result = await Navigator.push(
       context,
@@ -196,6 +195,7 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
           shape: _design.shape,
           density: _design.density,
           brightness: _design.brightness,
+          pattern: _design.pattern,
           patternPath: _design.patternPath,
           patternName: _design.patternName,
         );
@@ -203,7 +203,6 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
     }
   }
 
-  /// Открыть выбор материала
   Future<void> _openMaterialPicker() async {
     final result = await Navigator.push(
       context,
@@ -223,6 +222,34 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
           shape: _design.shape,
           density: _design.density,
           brightness: _design.brightness,
+          pattern: _design.pattern,
+          patternPath: _design.patternPath,
+          patternName: _design.patternName,
+        );
+      });
+    }
+  }
+
+  Future<void> _openPatternPicker() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PatternPickerScreen(
+          currentPattern: _design.pattern,
+          previewColor: _design.color?.color ?? Colors.pink,
+        ),
+      ),
+    );
+
+    if (result != null && result is NailPattern) {
+      setState(() {
+        _design = SelectedDesign(
+          color: _design.color,
+          material: _design.material,
+          shape: _design.shape,
+          density: _design.density,
+          brightness: _design.brightness,
+          pattern: result,
           patternPath: _design.patternPath,
           patternName: _design.patternName,
         );
@@ -244,7 +271,6 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
       ),
       body: Column(
         children: [
-          // Превью текущего выбора
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
@@ -265,9 +291,13 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
                   'Материал: ${_design.material?.name ?? 'Не выбран'}',
                   style: const TextStyle(fontSize: 16),
                 ),
+                Text(
+                  'Рисунок: ${NailPattern.getTypeName(_design.pattern.type)}',
+                  style: const TextStyle(fontSize: 16),
+                ),
                 if (_design.hasPattern)
                   Text(
-                    'Узор: ${_design.patternName}',
+                    'Узор-картинка: ${_design.patternName}',
                     style: const TextStyle(fontSize: 16, color: Colors.pink),
                   ),
               ],
@@ -278,7 +308,6 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                // НОВОЕ: Мои дизайны
                 const Text(
                   'Мои дизайны',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
@@ -301,7 +330,6 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Цвет
                 _buildSelectionCard(
                   icon: Icons.palette,
                   title: 'Цвет',
@@ -311,7 +339,6 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // Материал
                 _buildSelectionCard(
                   icon: Icons.diamond,
                   title: 'Материал',
@@ -319,11 +346,21 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
                   color: Colors.pink[100]!,
                   onTap: _openMaterialPicker,
                 ),
+                const SizedBox(height: 12),
+
+                _buildSelectionCard(
+                  icon: Icons.auto_awesome,
+                  title: 'Рисунок',
+                  subtitle: NailPattern.getTypeName(_design.pattern.type),
+                  color: _design.pattern.isNone
+                      ? Colors.grey[300]!
+                      : _design.pattern.color,
+                  onTap: _openPatternPicker,
+                ),
               ],
             ),
           ),
 
-          // Кнопка применить
           Padding(
             padding: const EdgeInsets.all(16),
             child: SizedBox(
@@ -347,7 +384,6 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
     );
   }
 
-  /// Плитка загрузки нового дизайна
   Widget _buildAddTile() {
     return GestureDetector(
       onTap: _uploadImage,
@@ -378,7 +414,6 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
     );
   }
 
-  /// Плитка дизайна из коллекции
   Widget _buildMyDesignTile(MyDesign d) {
     final isSelected = d.isImage
         ? _design.patternPath == d.imagePath
@@ -428,7 +463,6 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
     );
   }
 
-  /// Миниатюра рецепта (рисуется программно)
   Widget _buildRecipePreview(MyDesign d) {
     final color = _findColor(d.colorId)?.color ?? Colors.grey;
     final material = _findMaterial(d.materialId);
@@ -436,6 +470,9 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
     return Stack(
       children: [
         Positioned.fill(child: Container(color: color)),
+        Positioned.fill(
+          child: NailPatternLayer(pattern: d.pattern),
+        ),
         if (material?.hasGloss ?? false)
           Positioned.fill(
             child: Container(
@@ -461,7 +498,6 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
     );
   }
 
-  /// Карточка выбора
   Widget _buildSelectionCard({
     required IconData icon,
     required String title,

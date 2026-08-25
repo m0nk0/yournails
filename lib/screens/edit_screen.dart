@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import '../models/nail_zone.dart';
 import '../models/selected_design.dart';
 import '../models/nail_shape.dart';
+import '../models/nail_pattern.dart';
 import '../widgets/home_app_bar.dart';
+import '../widgets/nail_pattern_layer.dart';
 import 'result_screen.dart';
 import 'design_selection_screen.dart';
 
@@ -29,6 +31,7 @@ class _EditScreenState extends State<EditScreen> {
   NailShape _shape = NailShape.oval;
   double _density = 2.0;
   double _brightness = 1.0;
+  NailPattern _pattern = const NailPattern();
   bool _initialized = false;
 
   @override
@@ -63,6 +66,7 @@ class _EditScreenState extends State<EditScreen> {
             shape: _shape,
             density: _density,
             brightness: _brightness,
+            pattern: _pattern,
             patternPath: _selectedDesign?.patternPath,
             patternName: _selectedDesign?.patternName,
           ),
@@ -76,6 +80,7 @@ class _EditScreenState extends State<EditScreen> {
         _shape = result.shape;
         _density = result.density;
         _brightness = result.brightness;
+        _pattern = result.pattern;
       });
     }
   }
@@ -107,6 +112,7 @@ class _EditScreenState extends State<EditScreen> {
       shape: _shape,
       density: _density,
       brightness: _brightness,
+      pattern: _pattern,
       patternPath: _selectedDesign!.patternPath,
       patternName: _selectedDesign!.patternName,
     );
@@ -149,6 +155,7 @@ class _EditScreenState extends State<EditScreen> {
       shape: _shape,
       density: _density,
       brightness: _brightness,
+      pattern: _pattern,
       patternPath: _selectedDesign!.patternPath,
       patternName: _selectedDesign!.patternName,
     );
@@ -166,12 +173,19 @@ class _EditScreenState extends State<EditScreen> {
         borderRadius: borderRadius,
         child: Stack(
           children: [
+            // Слой 1: цвет
             Positioned.fill(
               child: Opacity(
                 opacity: render.opacity,
                 child: Container(color: render.color),
               ),
             ),
+            // Слой 2: рисунок
+            if (renderDesign.hasPatternDraw)
+              Positioned.fill(
+                child: NailPatternLayer(pattern: renderDesign.pattern),
+              ),
+            // Слой 3: PNG-картинка
             if (renderDesign.hasPattern)
               Positioned.fill(
                 child: Image.file(
@@ -182,6 +196,7 @@ class _EditScreenState extends State<EditScreen> {
                   },
                 ),
               ),
+            // Слой 4: глянец
             if (material?.hasGloss ?? false)
               Positioned.fill(
                 child: Container(
@@ -430,16 +445,23 @@ class _EditScreenState extends State<EditScreen> {
                       ],
                     ),
 
+                    // ИСПРАВЛЕНО: двусторонний поворот (центр = 0°)
                     Row(
                       children: [
                         const Icon(Icons.rotate_right, color: Colors.white, size: 18),
                         const SizedBox(width: 6),
-                        const Text('Поворот', style: TextStyle(color: Colors.white, fontSize: 11)),
+                        SizedBox(
+                          width: 70,
+                          child: Text(
+                            'Поворот: ${_rotation.toInt()}°',
+                            style: const TextStyle(color: Colors.white, fontSize: 11),
+                          ),
+                        ),
                         Expanded(
                           child: Slider(
                             value: _rotation,
-                            min: 0,
-                            max: 360,
+                            min: -180,
+                            max: 180,
                             activeColor: Colors.pink,
                             inactiveColor: Colors.white24,
                             onChanged: (value) => setState(() => _rotation = value),

@@ -1,4 +1,6 @@
+import 'package:flutter/material.dart';
 import 'nail_shape.dart';
+import 'nail_pattern.dart';
 
 /// Тип дизайна в коллекции
 enum MyDesignType { recipe, image }
@@ -15,6 +17,8 @@ class MyDesign {
   final String? shapeName;
   final double density;
   final double brightness;
+  final String? patternType;  // НОВОЕ: тип рисунка
+  final int? patternColor;    // НОВОЕ: цвет рисунка
 
   // Для картинки
   final String? imagePath;
@@ -30,6 +34,8 @@ class MyDesign {
     this.shapeName,
     this.density = 2.0,
     this.brightness = 1.0,
+    this.patternType,
+    this.patternColor,
     this.imagePath,
     required this.createdAt,
   });
@@ -46,6 +52,18 @@ class MyDesign {
     );
   }
 
+  /// НОВОЕ: Получить рисунок из сохранённых параметров
+  NailPattern get pattern {
+    if (patternType == null) return const NailPattern();
+    return NailPattern(
+      type: NailPatternType.values.firstWhere(
+        (t) => t.name == patternType,
+        orElse: () => NailPatternType.none,
+      ),
+      color: Color(patternColor ?? 0xFFFFFFFF),
+    );
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -56,6 +74,8 @@ class MyDesign {
       'shapeName': shapeName,
       'density': density,
       'brightness': brightness,
+      'patternType': patternType,
+      'patternColor': patternColor,
       'imagePath': imagePath,
       'createdAt': createdAt.toIso8601String(),
     };
@@ -74,6 +94,8 @@ class MyDesign {
       shapeName: map['shapeName'] as String?,
       density: (map['density'] as num?)?.toDouble() ?? 2.0,
       brightness: (map['brightness'] as num?)?.toDouble() ?? 1.0,
+      patternType: map['patternType'] as String?,
+      patternColor: map['patternColor'] as int?,
       imagePath: map['imagePath'] as String?,
       createdAt: DateTime.parse(map['createdAt'] as String),
     );

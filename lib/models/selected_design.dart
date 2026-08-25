@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'nail_color.dart';
 import 'nail_material.dart';
 import 'nail_shape.dart';
+import 'nail_pattern.dart';
 
 /// Итоговые параметры рендеринга дизайна
 class DesignRender {
@@ -11,15 +12,16 @@ class DesignRender {
   DesignRender({required this.color, required this.opacity});
 }
 
-/// Выбранный дизайн (цвет + материал + форма + слои + яркость + картинка)
+/// Выбранный дизайн (цвет + материал + форма + слои + яркость + рисунок + картинка)
 class SelectedDesign {
   final NailColor? color;
   final NailMaterial? material;
   final NailShape shape;
   final double density;
   final double brightness;
-  final String? patternPath;  // НОВОЕ: путь к PNG-картинке
-  final String? patternName;  // НОВОЕ: название картинки
+  final NailPattern pattern;   // НОВОЕ: рисунок (френч, омбре и т.д.)
+  final String? patternPath;   // PNG-картинка из коллекции
+  final String? patternName;
 
   SelectedDesign({
     this.color,
@@ -27,6 +29,7 @@ class SelectedDesign {
     this.shape = NailShape.oval,
     this.density = 2.0,
     this.brightness = 1.0,
+    this.pattern = const NailPattern(),
     this.patternPath,
     this.patternName,
   });
@@ -34,6 +37,7 @@ class SelectedDesign {
   bool get hasColor => color != null;
   bool get hasMaterial => material != null;
   bool get hasPattern => patternPath != null && patternPath!.isNotEmpty;
+  bool get hasPatternDraw => !pattern.isNone;
 
   /// Вычисляет итоговый цвет и прозрачность
   DesignRender getRender() {

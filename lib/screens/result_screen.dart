@@ -9,9 +9,11 @@ import '../models/client.dart';
 import '../models/nail_zone.dart';
 import '../models/selected_design.dart';
 import '../models/nail_shape.dart';
+import '../models/nail_pattern.dart';
 import '../models/my_design.dart';
 import '../services/database_service.dart';
 import '../widgets/home_app_bar.dart';
+import '../widgets/nail_pattern_layer.dart';
 
 class ResultScreen extends StatefulWidget {
   final File imageFile;
@@ -80,6 +82,9 @@ class _ResultScreenState extends State<ResultScreen> {
         shapeName: design.shape.name,
         density: design.density,
         brightness: design.brightness,
+        // НОВОЕ: сохраняем рисунок в рецепт
+        patternType: design.pattern.isNone ? null : design.pattern.type.name,
+        patternColor: design.pattern.isNone ? null : design.pattern.color.value,
         createdAt: DateTime.now(),
       ));
 
@@ -272,12 +277,19 @@ class _ResultScreenState extends State<ResultScreen> {
                         height: zone.height,
                         child: Stack(
                           children: [
+                            // Слой 1: цвет
                             Positioned.fill(
                               child: Opacity(
                                 opacity: render.opacity,
                                 child: Container(color: render.color),
                               ),
                             ),
+                            // Слой 2: НОВОЕ рисунок
+                            if (design.hasPatternDraw)
+                              Positioned.fill(
+                                child: NailPatternLayer(pattern: design.pattern),
+                              ),
+                            // Слой 3: PNG-картинка
                             if (design.hasPattern)
                               Positioned.fill(
                                 child: Image.file(
@@ -288,6 +300,7 @@ class _ResultScreenState extends State<ResultScreen> {
                                   },
                                 ),
                               ),
+                            // Слой 4: глянец
                             if (material?.hasGloss ?? false)
                               Positioned.fill(
                                 child: Container(
@@ -341,7 +354,7 @@ class _ResultScreenState extends State<ResultScreen> {
                       const SizedBox(width: 8),
                       Flexible(
                         child: Text(
-                          '${design.color?.name ?? 'Цвет'} • ${design.density.toInt()} сл. • ${NailShapeHelper.getName(design.shape)}',
+                          '${design.color?.name ?? 'Цвет'} • ${design.density.toInt()} сл. • ${NailPattern.getTypeName(design.pattern.type)}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 16,

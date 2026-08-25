@@ -1,8 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../models/client.dart';
@@ -36,15 +37,124 @@ class ResultScreen extends StatefulWidget {
 }
 
 class _ResultScreenState extends State<ResultScreen> {
-  final GlobalKey _repaintBoundaryKey = GlobalKey();
   bool _isSaving = false;
 
   NailZone get zone => widget.zone;
   SelectedDesign get design => widget.design;
 
+  /// Детерминированный рендер примерки через Canvas.
+  /// Размер = экран (ширина × высота body). Не зависит от дерева виджетов.
+  Future<Uint8List> _renderTryOnImage() async {
+    final mq = MediaQuery.of(context);
+    final double W = mq.size.width;
+    // Высота body = весь экран минус статусбар и AppBar
+    final double H =
+        mq.size.height - mq.padding.top - AppBar().preferredSize.height;
+    const double ratio = 2.0;
+
+    // Декодируем фото
+    final bytes = await widget.imageFile.readAsBytes();
+    final completer = Completer<ui.Image>();
+    ui.decodeImageFromList(bytes, (i) => completer.complete(i));
+    final photo = await completer.future;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.scale(ratio);
+
+    // Фото: contain + зум от центра + смещение (та же математика, что на экране)
+    final s = math.min(W / photo.width, H / photo.height);
+    final double w = photo.width * s * widget.imageScale;
+    final double h = photo.height * s * widget.imageScale;
+    final double cx = W / 2 + widget.imageOffset.dx;
+    final double cy = H / 2 + widget.imageOffset.dy;
+    final dst = Rect.fromLTWH(cx - w / 2, cy - h / 2, w, h);
+
+    canvas.drawImageRect(
+      photo,
+      Rect.fromLTWH(0, 0, photo.width.toDouble(), photo.height.toDouble()),
+      dst,
+      Paint(),
+    );
+
+    // Дизайн
+    final render = design.getRender();
+    final material = design.material;
+
+    canvas.save();
+    canvas.translate(zone.x, zone.y);
+    canvas.rotate(zone.rotation * math.pi / 180);
+
+    final rect = Rect.fromLTWH(
+      -zone.width / 2,
+      -zone.height / 2,
+      zone.width,
+      zone.height,
+    );
+    final rrect = NailShapeHelper.getBorderRadius(
+            design.shape, zone.width, zone.height)
+        .toRRect(rect);
+
+    canvas.clipRRect(rrect);
+
+    // Слой 1: цвет
+    canvas.drawRect(
+      rect,
+      Paint()..color = render.color.withOpacity(render.opacity),
+    );
+
+    // Слой 2: рисунок
+    if (design.hasPatternDraw) {
+      canvas.save();
+      canvas.translate(rect.left, rect.top);
+      NailPatternPainter(design.pattern)
+          .paint(canvas, Size(zone.width, zone.height));
+      canvas.restore();
+    }
+
+    // Слой 3: PNG-картинка
+    if (design.hasPattern) {
+      final pBytes = await File(design.patternPath!).readAsBytes();
+      final pCompleter = Completer<ui.Image>();
+      ui.decodeImageFromList(pBytes, (i) => pCompleter.complete(i));
+      final pImg = await pCompleter.future;
+      canvas.drawImageRect(
+        pImg,
+        Rect.fromLTWH(0, 0, pImg.width.toDouble(), pImg.height.toDouble()),
+        rect,
+        Paint(),
+      );
+    }
+
+    // Слой 4: глянец
+    if (material?.hasGloss ?? false) {
+      final gi = material?.glossIntensity ?? 0.5;
+      final glossPaint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.white.withOpacity(gi * 0.30),
+            Colors.white.withOpacity(gi * 0.10),
+            Colors.transparent,
+          ],
+          stops: const [0.0, 0.3, 0.7],
+        ).createShader(rect);
+      canvas.drawRect(rect, glossPaint);
+    }
+
+    canvas.restore();
+
+    final picture = recorder.endRecording();
+    final img = await picture.toImage((W * ratio).round(), (H * ratio).round());
+    final data = await img.toByteData(format: ui.ImageByteFormat.png);
+    return data!.buffer.asUint8List();
+  }
+
   Future<void> _saveToCollection() async {
     final nameController = TextEditingController(
-      text: '${design.color?.name ?? 'Дизайн'} • ${NailShapeHelper.getName(design.shape)}',
+      text:
+          '${design.color?.name ?? 'Дизайн'} • ${NailShapeHelper.getName(design.shape)}',
     );
 
     final ok = await showDialog<bool>(
@@ -113,8 +223,10 @@ class _ResultScreenState extends State<ResultScreen> {
               shrinkWrap: true,
               children: [
                 ListTile(
-                  leading: const Icon(Icons.person_add, color: Colors.pink, size: 28),
-                  title: const Text('Новый клиент', style: TextStyle(fontSize: 18)),
+                  leading:
+                      const Icon(Icons.person_add, color: Colors.pink, size: 28),
+                  title: const Text('Новый клиент',
+                      style: TextStyle(fontSize: 18)),
                   onTap: () => Navigator.pop(
                     context,
                     Client(id: 'NEW', name: '', createdAt: DateTime.now()),
@@ -192,16 +304,13 @@ class _ResultScreenState extends State<ResultScreen> {
         return;
       }
 
-      final boundary = _repaintBoundaryKey.currentContext!.findRenderObject()
-          as RenderRepaintBoundary;
-      final image = await boundary.toImage(pixelRatio: 3.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      final bytes = byteData!.buffer.asUint8List();
+      final bytes = await _renderTryOnImage();
 
       final tempDir = await getTemporaryDirectory();
       final tempFile = File('${tempDir.path}/tryon_temp.png');
       await tempFile.writeAsBytes(bytes);
-      final tryOnPath = await DatabaseService.savePhoto(tempFile, 'tryon_${client.id}');
+      final tryOnPath =
+          await DatabaseService.savePhoto(tempFile, 'tryon_${client.id}');
       await tempFile.delete();
 
       final beforePath =
@@ -239,101 +348,89 @@ class _ResultScreenState extends State<ResultScreen> {
   Widget build(BuildContext context) {
     final render = design.getRender();
     final material = design.material;
-    final borderRadius = NailShapeHelper.getBorderRadius(design.shape, zone.width, zone.height);
+    final borderRadius =
+        NailShapeHelper.getBorderRadius(design.shape, zone.width, zone.height);
 
     return Scaffold(
       appBar: const HomeAppBar(
         title: Text('Результат', style: TextStyle(fontSize: 22)),
       ),
-      // ВАЖНО: Stack на весь экран, панель поверх — геометрия как в EditScreen
       body: Stack(
         children: [
-          // Область рендеринга на ВЕСЬ экран
-          RepaintBoundary(
-            key: _repaintBoundaryKey,
-            child: Stack(
-              children: [
-                // Фото на весь экран
-                Positioned.fill(
-                  child: Transform.translate(
-                    offset: widget.imageOffset,
-                    child: Transform.scale(
-                      scale: widget.imageScale,
-                      child: Image.file(
-                        widget.imageFile,
-                        fit: BoxFit.contain,
-                      ),
-                    ),
-                  ),
+          // Фото на весь экран (без RepaintBoundary — он больше не нужен)
+          Positioned.fill(
+            child: Transform.translate(
+              offset: widget.imageOffset,
+              child: Transform.scale(
+                scale: widget.imageScale,
+                child: Image.file(
+                  widget.imageFile,
+                  fit: BoxFit.contain,
                 ),
-
-                // Наложение дизайна
-                Positioned(
-                  left: zone.x - zone.width / 2,
-                  top: zone.y - zone.height / 2,
-                  child: Transform.rotate(
-                    angle: zone.rotation * math.pi / 180,
-                    child: ClipRRect(
-                      borderRadius: borderRadius,
-                      child: SizedBox(
-                        width: zone.width,
-                        height: zone.height,
-                        child: Stack(
-                          children: [
-                            // Слой 1: цвет
-                            Positioned.fill(
-                              child: Opacity(
-                                opacity: render.opacity,
-                                child: Container(color: render.color),
-                              ),
-                            ),
-                            // Слой 2: рисунок
-                            if (design.hasPatternDraw)
-                              Positioned.fill(
-                                child: NailPatternLayer(pattern: design.pattern),
-                              ),
-                            // Слой 3: PNG-картинка
-                            if (design.hasPattern)
-                              Positioned.fill(
-                                child: Image.file(
-                                  File(design.patternPath!),
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return const SizedBox.shrink();
-                                  },
-                                ),
-                              ),
-                            // Слой 4: глянец
-                            if (material?.hasGloss ?? false)
-                              Positioned.fill(
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                      colors: [
-                                        Colors.white.withOpacity(
-                                            (material?.glossIntensity ?? 0.5) * 0.30),
-                                        Colors.white.withOpacity(
-                                            (material?.glossIntensity ?? 0.5) * 0.10),
-                                        Colors.transparent,
-                                      ],
-                                      stops: const [0.0, 0.3, 0.7],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
 
-          // Панель ПОВЕРХ (не влияет на геометрию)
+          // Наложение дизайна
+          Positioned(
+            left: zone.x - zone.width / 2,
+            top: zone.y - zone.height / 2,
+            child: Transform.rotate(
+              angle: zone.rotation * math.pi / 180,
+              child: ClipRRect(
+                borderRadius: borderRadius,
+                child: SizedBox(
+                  width: zone.width,
+                  height: zone.height,
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: Opacity(
+                          opacity: render.opacity,
+                          child: Container(color: render.color),
+                        ),
+                      ),
+                      if (design.hasPatternDraw)
+                        Positioned.fill(
+                          child: NailPatternLayer(pattern: design.pattern),
+                        ),
+                      if (design.hasPattern)
+                        Positioned.fill(
+                          child: Image.file(
+                            File(design.patternPath!),
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const SizedBox.shrink();
+                            },
+                          ),
+                        ),
+                      if (material?.hasGloss ?? false)
+                        Positioned.fill(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.white.withOpacity(
+                                      (material?.glossIntensity ?? 0.5) * 0.30),
+                                  Colors.white.withOpacity(
+                                      (material?.glossIntensity ?? 0.5) * 0.10),
+                                  Colors.transparent,
+                                ],
+                                stops: const [0.0, 0.3, 0.7],
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Панель поверх
           Positioned(
             bottom: 0,
             left: 0,
@@ -394,7 +491,8 @@ class _ResultScreenState extends State<ResultScreen> {
                                   child: CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : const Icon(Icons.person_pin),
-                          label: Text(_isSaving ? 'Сохранение...' : 'Сохранить клиенту'),
+                          label: Text(
+                              _isSaving ? 'Сохранение...' : 'Сохранить клиенту'),
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),

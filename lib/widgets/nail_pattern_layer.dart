@@ -13,16 +13,17 @@ class NailPatternLayer extends StatelessWidget {
     if (pattern.isNone) return const SizedBox.shrink();
     return IgnorePointer(
       child: CustomPaint(
-        painter: _PatternPainter(pattern),
+        painter: NailPatternPainter(pattern),
       ),
     );
   }
 }
 
-class _PatternPainter extends CustomPainter {
+/// ПУБЛИЧНЫЙ painter — используется и в виджете, и в canvas-рендере
+class NailPatternPainter extends CustomPainter {
   final NailPattern pattern;
 
-  _PatternPainter(this.pattern);
+  NailPatternPainter(this.pattern);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -52,7 +53,6 @@ class _PatternPainter extends CustomPainter {
     }
   }
 
-  /// Френч: белый кончик с линией "улыбки"
   void _drawFrench(Canvas canvas, Size size, Paint paint) {
     final tipH = size.height * 0.28;
     final smileD = size.height * 0.12;
@@ -72,7 +72,6 @@ class _PatternPainter extends CustomPainter {
     );
   }
 
-  /// Омбре: градиент от прозрачного к цвету узора
   void _drawOmbre(Canvas canvas, Size size, Paint paint) {
     paint.shader = LinearGradient(
       begin: Alignment.bottomCenter,
@@ -85,7 +84,6 @@ class _PatternPainter extends CustomPainter {
     canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
   }
 
-  /// Полоски: диагональная геометрия
   void _drawStripes(Canvas canvas, Size size, Paint paint) {
     paint
       ..style = PaintingStyle.stroke
@@ -100,7 +98,6 @@ class _PatternPainter extends CustomPainter {
     }
   }
 
-  /// Точки: горошек в шахматном порядке
   void _drawDots(Canvas canvas, Size size, Paint paint) {
     final r = size.width * 0.06;
     const cols = 4;
@@ -116,7 +113,6 @@ class _PatternPainter extends CustomPainter {
     }
   }
 
-  /// Мрамор: волнистые прожилки
   void _drawMarble(Canvas canvas, Size size, Paint paint) {
     paint
       ..style = PaintingStyle.stroke
@@ -137,7 +133,6 @@ class _PatternPainter extends CustomPainter {
     }
   }
 
-  /// Блёстки: случайные искры
   void _drawGlitter(Canvas canvas, Size size, Paint paint) {
     final rnd = math.Random(42);
 
@@ -155,7 +150,7 @@ class _PatternPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _PatternPainter oldDelegate) =>
+  bool shouldRepaint(covariant NailPatternPainter oldDelegate) =>
       oldDelegate.pattern.type != pattern.type ||
       oldDelegate.pattern.color != pattern.color;
 }

@@ -82,7 +82,6 @@ class _ResultScreenState extends State<ResultScreen> {
         shapeName: design.shape.name,
         density: design.density,
         brightness: design.brightness,
-        // НОВОЕ: сохраняем рисунок в рецепт
         patternType: design.pattern.isNone ? null : design.pattern.type.name,
         patternColor: design.pattern.isNone ? null : design.pattern.color.value,
         createdAt: DateTime.now(),
@@ -246,12 +245,15 @@ class _ResultScreenState extends State<ResultScreen> {
       appBar: const HomeAppBar(
         title: Text('Результат', style: TextStyle(fontSize: 22)),
       ),
+      // ВАЖНО: Stack на весь экран, панель поверх — геометрия как в EditScreen
       body: Stack(
         children: [
+          // Область рендеринга на ВЕСЬ экран
           RepaintBoundary(
             key: _repaintBoundaryKey,
             child: Stack(
               children: [
+                // Фото на весь экран
                 Positioned.fill(
                   child: Transform.translate(
                     offset: widget.imageOffset,
@@ -265,6 +267,7 @@ class _ResultScreenState extends State<ResultScreen> {
                   ),
                 ),
 
+                // Наложение дизайна
                 Positioned(
                   left: zone.x - zone.width / 2,
                   top: zone.y - zone.height / 2,
@@ -284,7 +287,7 @@ class _ResultScreenState extends State<ResultScreen> {
                                 child: Container(color: render.color),
                               ),
                             ),
-                            // Слой 2: НОВОЕ рисунок
+                            // Слой 2: рисунок
                             if (design.hasPatternDraw)
                               Positioned.fill(
                                 child: NailPatternLayer(pattern: design.pattern),
@@ -330,6 +333,7 @@ class _ResultScreenState extends State<ResultScreen> {
             ),
           ),
 
+          // Панель ПОВЕРХ (не влияет на геометрию)
           Positioned(
             bottom: 0,
             left: 0,

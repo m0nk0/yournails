@@ -4,8 +4,9 @@ import 'package:image_picker/image_picker.dart';
 import '../models/client.dart';
 import '../models/nail_session.dart';
 import '../services/database_service.dart';
-import 'photo_view_screen.dart';
 import '../widgets/home_app_bar.dart';
+import 'photo_view_screen.dart';
+import 'animation_screen.dart';
 
 class ClientDetailScreen extends StatefulWidget {
   final Client client;
@@ -33,7 +34,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     });
   }
 
-  /// Добавить новый визит с фото "до"
   Future<void> _addSessionWithBeforePhoto() async {
     final source = await _showSourceDialog();
     if (source == null) return;
@@ -82,7 +82,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     }
   }
 
-  /// Добавить фото "после"
   Future<void> _addAfterPhoto(NailSession session) async {
     final source = await _showSourceDialog();
     if (source == null) return;
@@ -203,10 +202,20 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     );
   }
 
+  /// НОВОЕ: открыть анимацию
+  void _openAnimation(NailSession session) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AnimationScreen(session: session),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-            appBar: HomeAppBar(
+      appBar: HomeAppBar(
         title: Text(
           widget.client.name,
           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
@@ -214,7 +223,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
       ),
       body: Column(
         children: [
-          // Информация о клиенте
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
@@ -245,14 +253,14 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
             ),
           ),
 
-          // Список визитов
           Expanded(
             child: _sessions.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.photo_library_outlined, size: 80, color: Colors.grey[400]),
+                        Icon(Icons.photo_library_outlined,
+                            size: 80, color: Colors.grey[400]),
                         const SizedBox(height: 20),
                         Text(
                           'Пока нет визитов',
@@ -291,8 +299,11 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     );
   }
 
-  /// Карточка визита с 3 фото: До / Примерка / После
   Widget _buildSessionCard(NailSession session) {
+    // НОВОЕ: считаем, хватает ли фото для анимации
+    final photoCount =
+        [session.hasBefore, session.hasTryOn, session.hasAfter].where((b) => b).length;
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
       child: Padding(
@@ -300,7 +311,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Заголовок
             Row(
               children: [
                 Expanded(
@@ -322,6 +332,13 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
                     ],
                   ),
                 ),
+                // НОВОЕ: кнопка анимации
+                if (photoCount >= 2)
+                  IconButton(
+                    icon: const Icon(Icons.movie_filter, color: Colors.pink, size: 30),
+                    tooltip: 'Анимация до/после',
+                    onPressed: () => _openAnimation(session),
+                  ),
                 IconButton(
                   icon: const Icon(Icons.delete_outline, color: Colors.red, size: 28),
                   onPressed: () => _deleteSession(session),
@@ -330,7 +347,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
             ),
             const SizedBox(height: 12),
 
-            // 3 фото: До / Примерка / После
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -371,7 +387,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     );
   }
 
-  /// Колонка с фото
   Widget _buildPhotoColumn(
     String label,
     bool hasPhoto,

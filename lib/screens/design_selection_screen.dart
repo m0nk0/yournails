@@ -60,7 +60,7 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
 
   void _applyMyDesign(MyDesign d) {
     setState(() {
-      if (d.isRecipe) {
+           if (d.isRecipe) {
         _design = SelectedDesign(
           color: _findColor(d.colorId),
           material: _findMaterial(d.materialId),
@@ -68,6 +68,10 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
           density: d.density,
           brightness: d.brightness,
           pattern: d.pattern,
+          // ДОБАВИТЬ эти 3 строки:
+          edgeDarken: d.edgeDarken,
+          highlightIntensity: d.highlightIntensity,
+          shadowIntensity: d.shadowIntensity,
         );
       } else {
         _design = SelectedDesign(

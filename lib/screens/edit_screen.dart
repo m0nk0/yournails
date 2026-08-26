@@ -6,7 +6,7 @@ import '../models/selected_design.dart';
 import '../models/nail_shape.dart';
 import '../models/nail_pattern.dart';
 import '../widgets/home_app_bar.dart';
-import '../widgets/nail_pattern_layer.dart';
+import '../widgets/nail_3d_renderer.dart';
 import 'result_screen.dart';
 import 'design_selection_screen.dart';
 
@@ -32,6 +32,18 @@ class _EditScreenState extends State<EditScreen> {
   double _density = 2.0;
   double _brightness = 1.0;
   NailPattern _pattern = const NailPattern();
+
+  // 3D-параметры
+  double _edgeDarken = 0.3;
+  double _highlightIntensity = 0.5;
+  double _shadowIntensity = 0.4;
+
+  // НОВОЕ: показывать ли розовую рамку
+  bool _showFrame = true;
+
+  // Раскрыта ли панель тонкой настройки
+  bool _showAdvanced = false;
+
   bool _initialized = false;
 
   @override
@@ -69,6 +81,9 @@ class _EditScreenState extends State<EditScreen> {
             pattern: _pattern,
             patternPath: _selectedDesign?.patternPath,
             patternName: _selectedDesign?.patternName,
+            edgeDarken: _edgeDarken,
+            highlightIntensity: _highlightIntensity,
+            shadowIntensity: _shadowIntensity,
           ),
         ),
       ),
@@ -81,6 +96,9 @@ class _EditScreenState extends State<EditScreen> {
         _density = result.density;
         _brightness = result.brightness;
         _pattern = result.pattern;
+        _edgeDarken = result.edgeDarken;
+        _highlightIntensity = result.highlightIntensity;
+        _shadowIntensity = result.shadowIntensity;
       });
     }
   }
@@ -115,6 +133,9 @@ class _EditScreenState extends State<EditScreen> {
       pattern: _pattern,
       patternPath: _selectedDesign!.patternPath,
       patternName: _selectedDesign!.patternName,
+      edgeDarken: _edgeDarken,
+      highlightIntensity: _highlightIntensity,
+      shadowIntensity: _shadowIntensity,
     );
 
     Navigator.push(
@@ -134,12 +155,15 @@ class _EditScreenState extends State<EditScreen> {
   Widget _buildNailPreview() {
     final borderRadius = NailShapeHelper.getBorderRadius(_shape, _frameWidth, _frameHeight);
 
+    // НОВОЕ: рамка только если _showFrame
+    final frameBorder = _showFrame ? Border.all(color: Colors.pink, width: 3) : null;
+
     if (_selectedDesign == null || !_selectedDesign!.hasColor) {
       return Container(
         width: _frameWidth,
         height: _frameHeight,
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.pink, width: 3),
+          border: frameBorder,
           borderRadius: borderRadius,
           color: Colors.pink.withOpacity(0.1),
         ),
@@ -158,62 +182,74 @@ class _EditScreenState extends State<EditScreen> {
       pattern: _pattern,
       patternPath: _selectedDesign!.patternPath,
       patternName: _selectedDesign!.patternName,
+      edgeDarken: _edgeDarken,
+      highlightIntensity: _highlightIntensity,
+      shadowIntensity: _shadowIntensity,
     );
-    final render = renderDesign.getRender();
-    final material = _selectedDesign!.material;
 
     return Container(
-      width: _frameWidth,
-      height: _frameHeight,
       decoration: BoxDecoration(
+        border: frameBorder,
         borderRadius: borderRadius,
-        border: Border.all(color: Colors.pink, width: 3),
       ),
-      child: ClipRRect(
-        borderRadius: borderRadius,
-        child: Stack(
+      child: Nail3DRenderer(
+        design: renderDesign,
+        width: _frameWidth,
+        height: _frameHeight,
+      ),
+    );
+  }
+
+  Widget _groupTitle(String title, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10, bottom: 2),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.pink, size: 16),
+          const SizedBox(width: 6),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.pink,
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdvancedToggle() {
+    return InkWell(
+      onTap: () => setState(() => _showAdvanced = !_showAdvanced),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white10,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Слой 1: цвет
-            Positioned.fill(
-              child: Opacity(
-                opacity: render.opacity,
-                child: Container(color: render.color),
+            const Icon(Icons.tune, color: Colors.white, size: 20),
+            const SizedBox(width: 8),
+            const Text(
+              'Тонкая настройка',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
               ),
             ),
-            // Слой 2: рисунок
-            if (renderDesign.hasPatternDraw)
-              Positioned.fill(
-                child: NailPatternLayer(pattern: renderDesign.pattern),
-              ),
-            // Слой 3: PNG-картинка
-            if (renderDesign.hasPattern)
-              Positioned.fill(
-                child: Image.file(
-                  File(renderDesign.patternPath!),
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return const SizedBox.shrink();
-                  },
-                ),
-              ),
-            // Слой 4: глянец
-            if (material?.hasGloss ?? false)
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.white.withOpacity((material?.glossIntensity ?? 0.5) * 0.30),
-                        Colors.white.withOpacity((material?.glossIntensity ?? 0.5) * 0.10),
-                        Colors.transparent,
-                      ],
-                      stops: const [0.0, 0.3, 0.7],
-                    ),
-                  ),
-                ),
-              ),
+            const SizedBox(width: 8),
+            Icon(
+              _showAdvanced ? Icons.expand_less : Icons.expand_more,
+              color: Colors.white,
+              size: 22,
+            ),
           ],
         ),
       ),
@@ -261,6 +297,31 @@ class _EditScreenState extends State<EditScreen> {
                 child: const Text(
                   '1 палец — двигать • 2 пальца — зум',
                   style: TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
+            ),
+          ),
+
+          // НОВОЕ: кнопка скрытия рамки (сверху справа, не попадает в фото)
+          Positioned(
+            top: 60,
+            right: 16,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => setState(() => _showFrame = !_showFrame),
+                borderRadius: BorderRadius.circular(24),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: Icon(
+                    _showFrame ? Icons.visibility : Icons.visibility_off,
+                    color: Colors.white,
+                    size: 22,
+                  ),
                 ),
               ),
             ),
@@ -360,115 +421,186 @@ class _EditScreenState extends State<EditScreen> {
                     ),
                     const SizedBox(height: 8),
 
-                    Row(
-                      children: [
-                        const Icon(Icons.layers, color: Colors.white, size: 18),
-                        const SizedBox(width: 6),
-                        SizedBox(
-                          width: 70,
-                          child: Text(
-                            'Слои: ${_density.toInt()}',
-                            style: const TextStyle(color: Colors.white, fontSize: 11),
-                          ),
-                        ),
-                        Expanded(
-                          child: Slider(
-                            value: _density,
-                            min: 1,
-                            max: 3,
-                            divisions: 2,
-                            activeColor: Colors.pink,
-                            inactiveColor: Colors.white24,
-                            onChanged: (value) => setState(() => _density = value),
-                          ),
-                        ),
-                      ],
-                    ),
+                    _buildAdvancedToggle(),
 
-                    Row(
-                      children: [
-                        const Icon(Icons.brightness_6, color: Colors.white, size: 18),
-                        const SizedBox(width: 6),
-                        const SizedBox(
-                          width: 70,
-                          child: Text(
-                            'Яркость',
-                            style: TextStyle(color: Colors.white, fontSize: 11),
+                    if (_showAdvanced) ...[
+                      _groupTitle('Цвет', Icons.palette),
+                      Row(
+                        children: [
+                          const Icon(Icons.layers, color: Colors.white, size: 18),
+                          const SizedBox(width: 6),
+                          SizedBox(
+                            width: 70,
+                            child: Text(
+                              'Слои: ${_density.toInt()}',
+                              style: const TextStyle(color: Colors.white, fontSize: 11),
+                            ),
                           ),
-                        ),
-                        Expanded(
-                          child: Slider(
-                            value: _brightness,
-                            min: 0.7,
-                            max: 1.3,
-                            activeColor: Colors.pink,
-                            inactiveColor: Colors.white24,
-                            onChanged: (value) => setState(() => _brightness = value),
+                          Expanded(
+                            child: Slider(
+                              value: _density,
+                              min: 1,
+                              max: 3,
+                              divisions: 2,
+                              activeColor: Colors.pink,
+                              inactiveColor: Colors.white24,
+                              onChanged: (value) => setState(() => _density = value),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          const Icon(Icons.brightness_6, color: Colors.white, size: 18),
+                          const SizedBox(width: 6),
+                          const SizedBox(
+                            width: 70,
+                            child: Text(
+                              'Яркость',
+                              style: TextStyle(color: Colors.white, fontSize: 11),
+                            ),
+                          ),
+                          Expanded(
+                            child: Slider(
+                              value: _brightness,
+                              min: 0.7,
+                              max: 1.3,
+                              activeColor: Colors.pink,
+                              inactiveColor: Colors.white24,
+                              onChanged: (value) => setState(() => _brightness = value),
+                            ),
+                          ),
+                        ],
+                      ),
 
-                    Row(
-                      children: [
-                        const Icon(Icons.swap_horiz, color: Colors.white, size: 18),
-                        const SizedBox(width: 6),
-                        const Text('Ширина', style: TextStyle(color: Colors.white, fontSize: 11)),
-                        Expanded(
-                          child: Slider(
-                            value: _frameWidth,
-                            min: 40,
-                            max: 300,
-                            activeColor: Colors.pink,
-                            inactiveColor: Colors.white24,
-                            onChanged: (value) => setState(() => _frameWidth = value),
+                      _groupTitle('Рамка', Icons.crop),
+                      Row(
+                        children: [
+                          const Icon(Icons.swap_horiz, color: Colors.white, size: 18),
+                          const SizedBox(width: 6),
+                          const Text('Ширина',
+                              style: TextStyle(color: Colors.white, fontSize: 11)),
+                          Expanded(
+                            child: Slider(
+                              value: _frameWidth,
+                              min: 40,
+                              max: 300,
+                              activeColor: Colors.pink,
+                              inactiveColor: Colors.white24,
+                              onChanged: (value) => setState(() => _frameWidth = value),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          const Icon(Icons.swap_vert, color: Colors.white, size: 18),
+                          const SizedBox(width: 6),
+                          const Text('Высота',
+                              style: TextStyle(color: Colors.white, fontSize: 11)),
+                          Expanded(
+                            child: Slider(
+                              value: _frameHeight,
+                              min: 40,
+                              max: 400,
+                              activeColor: Colors.pink,
+                              inactiveColor: Colors.white24,
+                              onChanged: (value) => setState(() => _frameHeight = value),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          const Icon(Icons.rotate_right, color: Colors.white, size: 18),
+                          const SizedBox(width: 6),
+                          SizedBox(
+                            width: 70,
+                            child: Text(
+                              'Поворот: ${_rotation.toInt()}°',
+                              style: const TextStyle(color: Colors.white, fontSize: 11),
+                            ),
+                          ),
+                          Expanded(
+                            child: Slider(
+                              value: _rotation,
+                              min: -180,
+                              max: 180,
+                              activeColor: Colors.pink,
+                              inactiveColor: Colors.white24,
+                              onChanged: (value) => setState(() => _rotation = value),
+                            ),
+                          ),
+                        ],
+                      ),
 
-                    Row(
-                      children: [
-                        const Icon(Icons.swap_vert, color: Colors.white, size: 18),
-                        const SizedBox(width: 6),
-                        const Text('Высота', style: TextStyle(color: Colors.white, fontSize: 11)),
-                        Expanded(
-                          child: Slider(
-                            value: _frameHeight,
-                            min: 40,
-                            max: 400,
-                            activeColor: Colors.pink,
-                            inactiveColor: Colors.white24,
-                            onChanged: (value) => setState(() => _frameHeight = value),
+                      _groupTitle('3D-эффект', Icons.view_in_ar),
+                      Row(
+                        children: [
+                          const Icon(Icons.blur_on, color: Colors.white, size: 18),
+                          const SizedBox(width: 6),
+                          const SizedBox(
+                            width: 70,
+                            child: Text('Объём',
+                                style: TextStyle(color: Colors.white, fontSize: 11)),
                           ),
-                        ),
-                      ],
-                    ),
-
-                    // ИСПРАВЛЕНО: двусторонний поворот (центр = 0°)
-                    Row(
-                      children: [
-                        const Icon(Icons.rotate_right, color: Colors.white, size: 18),
-                        const SizedBox(width: 6),
-                        SizedBox(
-                          width: 70,
-                          child: Text(
-                            'Поворот: ${_rotation.toInt()}°',
-                            style: const TextStyle(color: Colors.white, fontSize: 11),
+                          Expanded(
+                            child: Slider(
+                              value: _edgeDarken,
+                              min: 0.0,
+                              max: 1.0,
+                              activeColor: Colors.pink,
+                              inactiveColor: Colors.white24,
+                              onChanged: (value) => setState(() => _edgeDarken = value),
+                            ),
                           ),
-                        ),
-                        Expanded(
-                          child: Slider(
-                            value: _rotation,
-                            min: -180,
-                            max: 180,
-                            activeColor: Colors.pink,
-                            inactiveColor: Colors.white24,
-                            onChanged: (value) => setState(() => _rotation = value),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          const Icon(Icons.wb_sunny, color: Colors.white, size: 18),
+                          const SizedBox(width: 6),
+                          const SizedBox(
+                            width: 70,
+                            child: Text('Блик',
+                                style: TextStyle(color: Colors.white, fontSize: 11)),
                           ),
-                        ),
-                      ],
-                    ),
+                          Expanded(
+                            child: Slider(
+                              value: _highlightIntensity,
+                              min: 0.0,
+                              max: 1.0,
+                              activeColor: Colors.pink,
+                              inactiveColor: Colors.white24,
+                              onChanged: (value) =>
+                                  setState(() => _highlightIntensity = value),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          const Icon(Icons.dark_mode, color: Colors.white, size: 18),
+                          const SizedBox(width: 6),
+                          const SizedBox(
+                            width: 70,
+                            child: Text('Тень',
+                                style: TextStyle(color: Colors.white, fontSize: 11)),
+                          ),
+                          Expanded(
+                            child: Slider(
+                              value: _shadowIntensity,
+                              min: 0.0,
+                              max: 1.0,
+                              activeColor: Colors.pink,
+                              inactiveColor: Colors.white24,
+                              onChanged: (value) =>
+                                  setState(() => _shadowIntensity = value),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
 
                     const SizedBox(height: 8),
 

@@ -15,6 +15,7 @@ import '../models/my_design.dart';
 import '../services/database_service.dart';
 import '../widgets/home_app_bar.dart';
 import '../widgets/nail_pattern_layer.dart';
+import '../widgets/nail_3d_renderer.dart';
 
 class ResultScreen extends StatefulWidget {
   final File imageFile;
@@ -42,9 +43,7 @@ class _ResultScreenState extends State<ResultScreen> {
   NailZone get zone => widget.zone;
   SelectedDesign get design => widget.design;
 
-  /// Детерминированный рендер через Canvas.
-  /// withDesign=false → кадр "ДО" (то же фото, тот же зум, без дизайна)
-  /// withDesign=true  → кадр "ПРИМЕРКА" (с дизайном)
+  /// Детерминированный рендер через Canvas (с 3D-эффектами)
   Future<Uint8List> _renderTryOnImage({bool withDesign = true}) async {
     final mq = MediaQuery.of(context);
     final double W = mq.size.width;
@@ -52,7 +51,6 @@ class _ResultScreenState extends State<ResultScreen> {
         mq.size.height - mq.padding.top - AppBar().preferredSize.height;
     const double ratio = 2.0;
 
-    // Декодируем фото
     final bytes = await widget.imageFile.readAsBytes();
     final completer = Completer<ui.Image>();
     ui.decodeImageFromList(bytes, (i) => completer.complete(i));
@@ -62,7 +60,7 @@ class _ResultScreenState extends State<ResultScreen> {
     final canvas = Canvas(recorder);
     canvas.scale(ratio);
 
-    // Фото: contain + зум от центра + смещение (та же математика, что на экране)
+    // Фото: contain + зум от центра + смещение
     final s = math.min(W / photo.width, H / photo.height);
     final double w = photo.width * s * widget.imageScale;
     final double h = photo.height * s * widget.imageScale;
@@ -77,7 +75,6 @@ class _ResultScreenState extends State<ResultScreen> {
       Paint(),
     );
 
-    // Дизайн — только если withDesign
     if (withDesign) {
       final render = design.getRender();
       final material = design.material;
@@ -96,6 +93,18 @@ class _ResultScreenState extends State<ResultScreen> {
               design.shape, zone.width, zone.height)
           .toRRect(rect);
 
+      // НОВОЕ: тень под ногтем
+      if (design.shadowIntensity > 0) {
+        final shadowPaint = Paint()
+          ..color = Colors.black.withOpacity(design.shadowIntensity * 0.5)
+          ..maskFilter = MaskFilter.blur(
+              BlurStyle.normal, 6 * design.shadowIntensity);
+        canvas.save();
+        canvas.translate(0, 4 * design.shadowIntensity);
+        canvas.drawRRect(rrect, shadowPaint);
+        canvas.restore();
+      }
+
       canvas.clipRRect(rrect);
 
       // Слой 1: цвет
@@ -104,7 +113,38 @@ class _ResultScreenState extends State<ResultScreen> {
         Paint()..color = render.color.withOpacity(render.opacity),
       );
 
-      // Слой 2: рисунок
+      // НОВОЕ: Слой 2: объём (края темнее)
+      if (design.edgeDarken > 0) {
+        final edgePaint = Paint()
+          ..shader = RadialGradient(
+            center: Alignment.center,
+            radius: 0.8,
+            colors: [
+              Colors.transparent,
+              Colors.black.withOpacity(design.edgeDarken * 0.4),
+            ],
+            stops: const [0.5, 1.0],
+          ).createShader(rect);
+        canvas.drawRect(rect, edgePaint);
+      }
+
+      // НОВОЕ: Слой 3: блик сверху-слева
+      if (design.highlightIntensity > 0) {
+        final hlPaint = Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white.withOpacity(design.highlightIntensity * 0.4),
+              Colors.white.withOpacity(design.highlightIntensity * 0.1),
+              Colors.transparent,
+            ],
+            stops: const [0.0, 0.3, 0.7],
+          ).createShader(rect);
+        canvas.drawRect(rect, hlPaint);
+      }
+
+      // Слой 4: рисунок
       if (design.hasPatternDraw) {
         canvas.save();
         canvas.translate(rect.left, rect.top);
@@ -113,7 +153,7 @@ class _ResultScreenState extends State<ResultScreen> {
         canvas.restore();
       }
 
-      // Слой 3: PNG-картинка
+      // Слой 5: PNG-картинка
       if (design.hasPattern) {
         final pBytes = await File(design.patternPath!).readAsBytes();
         final pCompleter = Completer<ui.Image>();
@@ -127,7 +167,7 @@ class _ResultScreenState extends State<ResultScreen> {
         );
       }
 
-      // Слой 4: глянец
+      // Слой 6: глянец
       if (material?.hasGloss ?? false) {
         final gi = material?.glossIntensity ?? 0.5;
         final glossPaint = Paint()
@@ -196,6 +236,10 @@ class _ResultScreenState extends State<ResultScreen> {
         brightness: design.brightness,
         patternType: design.pattern.isNone ? null : design.pattern.type.name,
         patternColor: design.pattern.isNone ? null : design.pattern.color.value,
+        // НОВОЕ: сохраняем 3D-параметры в рецепт
+        edgeDarken: design.edgeDarken,
+        highlightIntensity: design.highlightIntensity,
+        shadowIntensity: design.shadowIntensity,
         createdAt: DateTime.now(),
       ));
 
@@ -296,8 +340,6 @@ class _ResultScreenState extends State<ResultScreen> {
     return null;
   }
 
-  /// Сохранить примерку клиенту.
-  /// НОВОЕ: "ДО" и "ПРИМЕРКА" рендерятся с ОДИНАКОВЫМ зумом мастера
   Future<void> _saveToClient() async {
     setState(() => _isSaving = true);
 
@@ -308,9 +350,7 @@ class _ResultScreenState extends State<ResultScreen> {
         return;
       }
 
-      // Кадр "ПРИМЕРКА": фото с зумом + дизайн
       final tryOnBytes = await _renderTryOnImage(withDesign: true);
-      // Кадр "ДО": то же фото, тот же зум, БЕЗ дизайна
       final beforeBytes = await _renderTryOnImage(withDesign: false);
 
       final tempDir = await getTemporaryDirectory();
@@ -358,9 +398,6 @@ class _ResultScreenState extends State<ResultScreen> {
   @override
   Widget build(BuildContext context) {
     final render = design.getRender();
-    final material = design.material;
-    final borderRadius =
-        NailShapeHelper.getBorderRadius(design.shape, zone.width, zone.height);
 
     return Scaffold(
       appBar: const HomeAppBar(
@@ -382,61 +419,16 @@ class _ResultScreenState extends State<ResultScreen> {
             ),
           ),
 
-          // Наложение дизайна
+          // НОВОЕ: 3D-ноготь через общий рендерер
           Positioned(
             left: zone.x - zone.width / 2,
             top: zone.y - zone.height / 2,
             child: Transform.rotate(
               angle: zone.rotation * math.pi / 180,
-              child: ClipRRect(
-                borderRadius: borderRadius,
-                child: SizedBox(
-                  width: zone.width,
-                  height: zone.height,
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: Opacity(
-                          opacity: render.opacity,
-                          child: Container(color: render.color),
-                        ),
-                      ),
-                      if (design.hasPatternDraw)
-                        Positioned.fill(
-                          child: NailPatternLayer(pattern: design.pattern),
-                        ),
-                      if (design.hasPattern)
-                        Positioned.fill(
-                          child: Image.file(
-                            File(design.patternPath!),
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return const SizedBox.shrink();
-                            },
-                          ),
-                        ),
-                      if (material?.hasGloss ?? false)
-                        Positioned.fill(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  Colors.white.withOpacity(
-                                      (material?.glossIntensity ?? 0.5) * 0.30),
-                                  Colors.white.withOpacity(
-                                      (material?.glossIntensity ?? 0.5) * 0.10),
-                                  Colors.transparent,
-                                ],
-                                stops: const [0.0, 0.3, 0.7],
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
+              child: Nail3DRenderer(
+                design: design,
+                width: zone.width,
+                height: zone.height,
               ),
             ),
           ),

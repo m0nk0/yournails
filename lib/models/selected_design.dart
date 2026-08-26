@@ -12,16 +12,21 @@ class DesignRender {
   DesignRender({required this.color, required this.opacity});
 }
 
-/// Выбранный дизайн (цвет + материал + форма + слои + яркость + рисунок + картинка)
+/// Выбранный дизайн с 3D-параметрами
 class SelectedDesign {
   final NailColor? color;
   final NailMaterial? material;
   final NailShape shape;
   final double density;
   final double brightness;
-  final NailPattern pattern;   // НОВОЕ: рисунок (френч, омбре и т.д.)
-  final String? patternPath;   // PNG-картинка из коллекции
+  final NailPattern pattern;
+  final String? patternPath;
   final String? patternName;
+
+  // НОВОЕ: 3D-параметры
+  final double edgeDarken;      // 0.0-1.0: затемнение краёв (объём)
+  final double highlightIntensity; // 0.0-1.0: блик сверху
+  final double shadowIntensity;    // 0.0-1.0: тень под ногтем
 
   SelectedDesign({
     this.color,
@@ -32,6 +37,9 @@ class SelectedDesign {
     this.pattern = const NailPattern(),
     this.patternPath,
     this.patternName,
+    this.edgeDarken = 0.3,
+    this.highlightIntensity = 0.5,
+    this.shadowIntensity = 0.4,
   });
 
   bool get hasColor => color != null;

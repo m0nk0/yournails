@@ -1,12 +1,15 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/client.dart';
 import '../models/nail_session.dart';
 import '../services/database_service.dart';
 import '../widgets/home_app_bar.dart';
 import 'photo_view_screen.dart';
 import 'animation_screen.dart';
+import 'align_after_screen.dart';
 
 class ClientDetailScreen extends StatefulWidget {
   final Client client;
@@ -71,10 +74,7 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -82,57 +82,90 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     }
   }
 
+  /// НОВОЕ: добавление "ПОСЛЕ" ТОЛЬКО из галереи (для выравнивания по призраку)
   Future<void> _addAfterPhoto(NailSession session) async {
-    final source = await _showSourceDialog();
-    if (source == null) return;
+    // Сразу открываем галерею (камеру не используем, так как призрак показать нельзя)
+    final XFile? photo = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+    );
+    
+    if (photo == null) return; // Отмена выбора
+
+    if (session.beforePhotoPath == null) {
+      // Нет эталона "до" — сохраняем как есть (редкий случай)
+      await _saveAfterDirect(session, File(photo.path));
+      return;
+    }
 
     setState(() => _isLoading = true);
 
     try {
-      final XFile? photo = await _picker.pickImage(
-        source: source,
-        imageQuality: 80,
+      // Открываем экран выравнивания с призраком
+      final aligned = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AlignAfterScreen(
+            beforeFile: File(session.beforePhotoPath!),
+            afterFile: File(photo.path),
+          ),
+        ),
       );
 
-      if (photo != null) {
-        final savedPath = await DatabaseService.savePhoto(
-          File(photo.path),
-          'after_${session.id}',
-        );
-
-        final updatedSession = NailSession(
-          id: session.id,
-          clientId: session.clientId,
-          beforePhotoPath: session.beforePhotoPath,
-          tryOnPhotoPath: session.tryOnPhotoPath,
-          afterPhotoPath: savedPath,
-          note: session.note,
-          createdAt: session.createdAt,
-        );
-        await DatabaseService.updateSession(updatedSession);
-
-        _loadSessions();
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Фото "после" сохранено'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
+      if (aligned is Uint8List) {
+        final tempDir = await getTempDir();
+        final tempFile = File('$tempDir/after_temp.png');
+        await tempFile.writeAsBytes(aligned);
+        final savedPath =
+            await DatabaseService.savePhoto(tempFile, 'after_${session.id}');
+        await tempFile.delete();
+        await _updateAfter(session, savedPath);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
       setState(() => _isLoading = false);
+    }
+  }
+
+  Future<String> getTempDir() async {
+    final d = await getApplicationDocumentsDirectory();
+    return d.path;
+  }
+
+  Future<void> _saveAfterDirect(NailSession session, File file) async {
+    setState(() => _isLoading = true);
+    try {
+      final savedPath = await DatabaseService.savePhoto(file, 'after_${session.id}');
+      await _updateAfter(session, savedPath);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _updateAfter(NailSession session, String savedPath) async {
+    final updated = NailSession(
+      id: session.id,
+      clientId: session.clientId,
+      beforePhotoPath: session.beforePhotoPath,
+      tryOnPhotoPath: session.tryOnPhotoPath,
+      afterPhotoPath: savedPath,
+      note: session.note,
+      createdAt: session.createdAt,
+    );
+    await DatabaseService.updateSession(updated);
+    _loadSessions();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Фото "после" сохранено'),
+          backgroundColor: Colors.green,
+        ),
+      );
     }
   }
 
@@ -202,7 +235,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     );
   }
 
-  /// НОВОЕ: открыть анимацию
   void _openAnimation(NailSession session) {
     Navigator.push(
       context,
@@ -300,9 +332,11 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
   }
 
   Widget _buildSessionCard(NailSession session) {
-    // НОВОЕ: считаем, хватает ли фото для анимации
-    final photoCount =
-        [session.hasBefore, session.hasTryOn, session.hasAfter].where((b) => b).length;
+    final photoCount = [
+      session.hasBefore,
+      session.hasTryOn,
+      session.hasAfter
+    ].where((b) => b).length;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -319,10 +353,7 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
                     children: [
                       const Text(
                         'Визит',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 20,
-                        ),
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -332,13 +363,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
                     ],
                   ),
                 ),
-                // НОВОЕ: кнопка анимации
-                if (photoCount >= 2)
-                  IconButton(
-                    icon: const Icon(Icons.movie_filter, color: Colors.pink, size: 30),
-                    tooltip: 'Анимация до/после',
-                    onPressed: () => _openAnimation(session),
-                  ),
                 IconButton(
                   icon: const Icon(Icons.delete_outline, color: Colors.red, size: 28),
                   onPressed: () => _deleteSession(session),
@@ -352,35 +376,64 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
               children: [
                 Expanded(
                   child: _buildPhotoColumn(
-                    'До',
-                    session.hasBefore,
-                    session.beforePhotoPath,
-                    session,
-                    null,
-                  ),
+                    'До', session.hasBefore, session.beforePhotoPath, session, null),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: _buildPhotoColumn(
-                    'Примерка',
-                    session.hasTryOn,
-                    session.tryOnPhotoPath,
-                    session,
-                    null,
-                  ),
+                    'Примерка', session.hasTryOn, session.tryOnPhotoPath, session, null),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: _buildPhotoColumn(
-                    'После',
-                    session.hasAfter,
-                    session.afterPhotoPath,
-                    session,
-                    () => _addAfterPhoto(session),
-                  ),
+                    'После', session.hasAfter, session.afterPhotoPath, session,
+                    () => _addAfterPhoto(session)),
                 ),
               ],
             ),
+
+            if (photoCount >= 2) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFE91E63), Color(0xFF7B1FA2)],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFE91E63).withOpacity(0.4),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: ElevatedButton.icon(
+                    onPressed: () => _openAnimation(session),
+                    icon: const Icon(Icons.movie_filter, size: 28, color: Colors.white),
+                    label: const Text(
+                      'ВИДЕО ДО/ПОСЛЕ',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -398,10 +451,7 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
         const SizedBox(height: 8),
         AspectRatio(
@@ -432,13 +482,14 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
                           child: const Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.add_a_photo, color: Colors.pink, size: 32),
-                              SizedBox(height: 4),
+                              Icon(Icons.photo_library, color: Colors.pink, size: 32),
+                              SizedBox(height: 8),
                               Text(
-                                'Добавить',
+                                '📸 Сделайте фото камерой,\nзатем выберите здесь',
+                                textAlign: TextAlign.center,
                                 style: TextStyle(
                                   color: Colors.pink,
-                                  fontSize: 14,
+                                  fontSize: 11,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),

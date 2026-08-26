@@ -5,7 +5,7 @@ import 'nail_pattern.dart';
 /// Тип дизайна в коллекции
 enum MyDesignType { recipe, image }
 
-/// Дизайн из коллекции мастера (рецепт ИЛИ картинка)
+/// Дизайн из коллекции мастера
 class MyDesign {
   final String id;
   final String name;
@@ -17,8 +17,11 @@ class MyDesign {
   final String? shapeName;
   final double density;
   final double brightness;
-  final String? patternType;  // НОВОЕ: тип рисунка
-  final int? patternColor;    // НОВОЕ: цвет рисунка
+  final String? patternType;
+  final int? patternColor;
+  final double edgeDarken;
+  final double highlightIntensity;
+  final double shadowIntensity;
 
   // Для картинки
   final String? imagePath;
@@ -36,6 +39,9 @@ class MyDesign {
     this.brightness = 1.0,
     this.patternType,
     this.patternColor,
+    this.edgeDarken = 0.3,
+    this.highlightIntensity = 0.5,
+    this.shadowIntensity = 0.4,
     this.imagePath,
     required this.createdAt,
   });
@@ -43,7 +49,6 @@ class MyDesign {
   bool get isRecipe => type == MyDesignType.recipe;
   bool get isImage => type == MyDesignType.image;
 
-  /// Получить форму из названия
   NailShape get shape {
     if (shapeName == null) return NailShape.oval;
     return NailShape.values.firstWhere(
@@ -52,7 +57,6 @@ class MyDesign {
     );
   }
 
-  /// НОВОЕ: Получить рисунок из сохранённых параметров
   NailPattern get pattern {
     if (patternType == null) return const NailPattern();
     return NailPattern(
@@ -76,6 +80,9 @@ class MyDesign {
       'brightness': brightness,
       'patternType': patternType,
       'patternColor': patternColor,
+      'edgeDarken': edgeDarken,
+      'highlightIntensity': highlightIntensity,
+      'shadowIntensity': shadowIntensity,
       'imagePath': imagePath,
       'createdAt': createdAt.toIso8601String(),
     };
@@ -96,6 +103,9 @@ class MyDesign {
       brightness: (map['brightness'] as num?)?.toDouble() ?? 1.0,
       patternType: map['patternType'] as String?,
       patternColor: map['patternColor'] as int?,
+      edgeDarken: (map['edgeDarken'] as num?)?.toDouble() ?? 0.3,
+      highlightIntensity: (map['highlightIntensity'] as num?)?.toDouble() ?? 0.5,
+      shadowIntensity: (map['shadowIntensity'] as num?)?.toDouble() ?? 0.4,
       imagePath: map['imagePath'] as String?,
       createdAt: DateTime.parse(map['createdAt'] as String),
     );

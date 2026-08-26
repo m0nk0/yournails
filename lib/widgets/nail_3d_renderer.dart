@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/selected_design.dart';
 import '../models/nail_shape.dart';
 import 'nail_pattern_layer.dart';
+import 'dart:ui' as ui;
 
 /// Рендер 3D-ногтя с регулируемыми параметрами
 class Nail3DRenderer extends StatelessWidget {
@@ -109,21 +110,25 @@ class Nail3DRenderer extends StatelessWidget {
                 ),
               ),
 
-            // НОВОЕ Слой 6: световая колонна (светлая полоса по центру)
+            // Слой 6: световая колонна — ШИРЕ и РАЗМЫТЕЕ
             if (design.highlightIntensity > 0)
               Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: borderRadius,
-                    gradient: LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [
-                        Colors.transparent,
-                        Colors.white.withOpacity(design.highlightIntensity * 0.35),
-                        Colors.transparent,
-                      ],
-                      stops: const [0.35, 0.5, 0.65],
+                child: ImageFiltered(
+                  imageFilter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: borderRadius,
+                      gradient: LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: [
+                          Colors.transparent,
+                          Colors.white
+                              .withOpacity(design.highlightIntensity * 0.45),
+                          Colors.transparent,
+                        ],
+                        stops: const [0.25, 0.5, 0.75],
+                      ),
                     ),
                   ),
                 ),

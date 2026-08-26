@@ -167,18 +167,19 @@ class _ResultScreenState extends State<ResultScreen> {
         canvas.drawRect(rect, cPaint);
       }
 
-      // НОВОЕ Слой 6: световая колонна
+            // Слой 6: световая колонна — ШИРЕ и РАЗМЫТЕЕ
       if (design.highlightIntensity > 0) {
         final lPaint = Paint()
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10)
           ..shader = LinearGradient(
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
             colors: [
               Colors.transparent,
-              Colors.white.withOpacity(design.highlightIntensity * 0.35),
+              Colors.white.withOpacity(design.highlightIntensity * 0.45),
               Colors.transparent,
             ],
-            stops: const [0.35, 0.5, 0.65],
+            stops: const [0.25, 0.5, 0.75],
           ).createShader(rect);
         canvas.drawRect(rect, lPaint);
       }

@@ -41,7 +41,7 @@ class _EditScreenState extends State<EditScreen> {
   // Показывать ли розовую рамку
   bool _showFrame = true;
 
-  // НОВОЕ: режим 3D-настроек (иначе обычные)
+  // Режим 3D-настроек
   bool _show3D = false;
 
   bool _initialized = false;
@@ -226,6 +226,7 @@ class _EditScreenState extends State<EditScreen> {
       ),
       body: Stack(
         children: [
+          // ИСПРАВЛЕНО: фото БЕЗ затемнения — цветопередача как в результате
           Positioned.fill(
             child: GestureDetector(
               onScaleStart: _onPhotoScaleStart,
@@ -237,8 +238,6 @@ class _EditScreenState extends State<EditScreen> {
                   child: Image.file(
                     widget.imageFile,
                     fit: BoxFit.contain,
-                    color: Colors.black.withOpacity(0.3),
-                    colorBlendMode: BlendMode.darken,
                   ),
                 ),
               ),
@@ -316,7 +315,6 @@ class _EditScreenState extends State<EditScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // НОВОЕ: Дизайн (уже не на всю ширину) + кнопка 3D справа
                     Row(
                       children: [
                         Expanded(
@@ -338,7 +336,6 @@ class _EditScreenState extends State<EditScreen> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        // Кнопка 3D: меняет цвет в активном состоянии
                         GestureDetector(
                           onTap: () => setState(() => _show3D = !_show3D),
                           child: AnimatedContainer(
@@ -377,7 +374,6 @@ class _EditScreenState extends State<EditScreen> {
                     ),
                     const SizedBox(height: 8),
 
-                    // Формы
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: NailShape.values.map((shape) {
@@ -425,7 +421,6 @@ class _EditScreenState extends State<EditScreen> {
                     ),
                     const SizedBox(height: 8),
 
-                    // РЕЖИМ 3D: только 3D-ползунки
                     if (_show3D) ...[
                       _groupTitle('3D-эффект', Icons.view_in_ar),
                       Row(
@@ -495,7 +490,6 @@ class _EditScreenState extends State<EditScreen> {
                       ),
                     ],
 
-                    // ОБЫЧНЫЙ РЕЖИМ: прежние настройки всегда открыты
                     if (!_show3D) ...[
                       Row(
                         children: [

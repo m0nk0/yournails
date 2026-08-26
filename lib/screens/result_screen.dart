@@ -42,12 +42,12 @@ class _ResultScreenState extends State<ResultScreen> {
   NailZone get zone => widget.zone;
   SelectedDesign get design => widget.design;
 
-  /// Детерминированный рендер примерки через Canvas.
-  /// Размер = экран (ширина × высота body). Не зависит от дерева виджетов.
-  Future<Uint8List> _renderTryOnImage() async {
+  /// Детерминированный рендер через Canvas.
+  /// withDesign=false → кадр "ДО" (то же фото, тот же зум, без дизайна)
+  /// withDesign=true  → кадр "ПРИМЕРКА" (с дизайном)
+  Future<Uint8List> _renderTryOnImage({bool withDesign = true}) async {
     final mq = MediaQuery.of(context);
     final double W = mq.size.width;
-    // Высота body = весь экран минус статусбар и AppBar
     final double H =
         mq.size.height - mq.padding.top - AppBar().preferredSize.height;
     const double ratio = 2.0;
@@ -77,73 +77,75 @@ class _ResultScreenState extends State<ResultScreen> {
       Paint(),
     );
 
-    // Дизайн
-    final render = design.getRender();
-    final material = design.material;
+    // Дизайн — только если withDesign
+    if (withDesign) {
+      final render = design.getRender();
+      final material = design.material;
 
-    canvas.save();
-    canvas.translate(zone.x, zone.y);
-    canvas.rotate(zone.rotation * math.pi / 180);
-
-    final rect = Rect.fromLTWH(
-      -zone.width / 2,
-      -zone.height / 2,
-      zone.width,
-      zone.height,
-    );
-    final rrect = NailShapeHelper.getBorderRadius(
-            design.shape, zone.width, zone.height)
-        .toRRect(rect);
-
-    canvas.clipRRect(rrect);
-
-    // Слой 1: цвет
-    canvas.drawRect(
-      rect,
-      Paint()..color = render.color.withOpacity(render.opacity),
-    );
-
-    // Слой 2: рисунок
-    if (design.hasPatternDraw) {
       canvas.save();
-      canvas.translate(rect.left, rect.top);
-      NailPatternPainter(design.pattern)
-          .paint(canvas, Size(zone.width, zone.height));
+      canvas.translate(zone.x, zone.y);
+      canvas.rotate(zone.rotation * math.pi / 180);
+
+      final rect = Rect.fromLTWH(
+        -zone.width / 2,
+        -zone.height / 2,
+        zone.width,
+        zone.height,
+      );
+      final rrect = NailShapeHelper.getBorderRadius(
+              design.shape, zone.width, zone.height)
+          .toRRect(rect);
+
+      canvas.clipRRect(rrect);
+
+      // Слой 1: цвет
+      canvas.drawRect(
+        rect,
+        Paint()..color = render.color.withOpacity(render.opacity),
+      );
+
+      // Слой 2: рисунок
+      if (design.hasPatternDraw) {
+        canvas.save();
+        canvas.translate(rect.left, rect.top);
+        NailPatternPainter(design.pattern)
+            .paint(canvas, Size(zone.width, zone.height));
+        canvas.restore();
+      }
+
+      // Слой 3: PNG-картинка
+      if (design.hasPattern) {
+        final pBytes = await File(design.patternPath!).readAsBytes();
+        final pCompleter = Completer<ui.Image>();
+        ui.decodeImageFromList(pBytes, (i) => pCompleter.complete(i));
+        final pImg = await pCompleter.future;
+        canvas.drawImageRect(
+          pImg,
+          Rect.fromLTWH(0, 0, pImg.width.toDouble(), pImg.height.toDouble()),
+          rect,
+          Paint(),
+        );
+      }
+
+      // Слой 4: глянец
+      if (material?.hasGloss ?? false) {
+        final gi = material?.glossIntensity ?? 0.5;
+        final glossPaint = Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.white.withOpacity(gi * 0.30),
+              Colors.white.withOpacity(gi * 0.10),
+              Colors.transparent,
+            ],
+            stops: const [0.0, 0.3, 0.7],
+          ).createShader(rect);
+        canvas.drawRect(rect, glossPaint);
+      }
+
       canvas.restore();
     }
-
-    // Слой 3: PNG-картинка
-    if (design.hasPattern) {
-      final pBytes = await File(design.patternPath!).readAsBytes();
-      final pCompleter = Completer<ui.Image>();
-      ui.decodeImageFromList(pBytes, (i) => pCompleter.complete(i));
-      final pImg = await pCompleter.future;
-      canvas.drawImageRect(
-        pImg,
-        Rect.fromLTWH(0, 0, pImg.width.toDouble(), pImg.height.toDouble()),
-        rect,
-        Paint(),
-      );
-    }
-
-    // Слой 4: глянец
-    if (material?.hasGloss ?? false) {
-      final gi = material?.glossIntensity ?? 0.5;
-      final glossPaint = Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.white.withOpacity(gi * 0.30),
-            Colors.white.withOpacity(gi * 0.10),
-            Colors.transparent,
-          ],
-          stops: const [0.0, 0.3, 0.7],
-        ).createShader(rect);
-      canvas.drawRect(rect, glossPaint);
-    }
-
-    canvas.restore();
 
     final picture = recorder.endRecording();
     final img = await picture.toImage((W * ratio).round(), (H * ratio).round());
@@ -294,6 +296,8 @@ class _ResultScreenState extends State<ResultScreen> {
     return null;
   }
 
+  /// Сохранить примерку клиенту.
+  /// НОВОЕ: "ДО" и "ПРИМЕРКА" рендерятся с ОДИНАКОВЫМ зумом мастера
   Future<void> _saveToClient() async {
     setState(() => _isSaving = true);
 
@@ -304,17 +308,24 @@ class _ResultScreenState extends State<ResultScreen> {
         return;
       }
 
-      final bytes = await _renderTryOnImage();
+      // Кадр "ПРИМЕРКА": фото с зумом + дизайн
+      final tryOnBytes = await _renderTryOnImage(withDesign: true);
+      // Кадр "ДО": то же фото, тот же зум, БЕЗ дизайна
+      final beforeBytes = await _renderTryOnImage(withDesign: false);
 
       final tempDir = await getTemporaryDirectory();
-      final tempFile = File('${tempDir.path}/tryon_temp.png');
-      await tempFile.writeAsBytes(bytes);
-      final tryOnPath =
-          await DatabaseService.savePhoto(tempFile, 'tryon_${client.id}');
-      await tempFile.delete();
 
+      final tryOnTemp = File('${tempDir.path}/tryon_temp.png');
+      await tryOnTemp.writeAsBytes(tryOnBytes);
+      final tryOnPath =
+          await DatabaseService.savePhoto(tryOnTemp, 'tryon_${client.id}');
+      await tryOnTemp.delete();
+
+      final beforeTemp = File('${tempDir.path}/before_temp.png');
+      await beforeTemp.writeAsBytes(beforeBytes);
       final beforePath =
-          await DatabaseService.savePhoto(widget.imageFile, 'before_${client.id}');
+          await DatabaseService.savePhoto(beforeTemp, 'before_${client.id}');
+      await beforeTemp.delete();
 
       await DatabaseService.addSessionWithPhotos(
         clientId: client.id,
@@ -357,7 +368,7 @@ class _ResultScreenState extends State<ResultScreen> {
       ),
       body: Stack(
         children: [
-          // Фото на весь экран (без RepaintBoundary — он больше не нужен)
+          // Фото на весь экран
           Positioned.fill(
             child: Transform.translate(
               offset: widget.imageOffset,

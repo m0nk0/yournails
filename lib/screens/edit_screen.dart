@@ -38,11 +38,11 @@ class _EditScreenState extends State<EditScreen> {
   double _highlightIntensity = 0.5;
   double _shadowIntensity = 0.4;
 
-  // НОВОЕ: показывать ли розовую рамку
+  // Показывать ли розовую рамку
   bool _showFrame = true;
 
-  // Раскрыта ли панель тонкой настройки
-  bool _showAdvanced = false;
+  // НОВОЕ: режим 3D-настроек (иначе обычные)
+  bool _show3D = false;
 
   bool _initialized = false;
 
@@ -154,8 +154,6 @@ class _EditScreenState extends State<EditScreen> {
 
   Widget _buildNailPreview() {
     final borderRadius = NailShapeHelper.getBorderRadius(_shape, _frameWidth, _frameHeight);
-
-    // НОВОЕ: рамка только если _showFrame
     final frameBorder = _showFrame ? Border.all(color: Colors.pink, width: 3) : null;
 
     if (_selectedDesign == null || !_selectedDesign!.hasColor) {
@@ -220,42 +218,6 @@ class _EditScreenState extends State<EditScreen> {
     );
   }
 
-  Widget _buildAdvancedToggle() {
-    return InkWell(
-      onTap: () => setState(() => _showAdvanced = !_showAdvanced),
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white10,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.tune, color: Colors.white, size: 20),
-            const SizedBox(width: 8),
-            const Text(
-              'Тонкая настройка',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Icon(
-              _showAdvanced ? Icons.expand_less : Icons.expand_more,
-              color: Colors.white,
-              size: 22,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -302,7 +264,7 @@ class _EditScreenState extends State<EditScreen> {
             ),
           ),
 
-          // НОВОЕ: кнопка скрытия рамки (сверху справа, не попадает в фото)
+          // Кнопка скрытия рамки
           Positioned(
             top: 60,
             right: 16,
@@ -354,26 +316,68 @@ class _EditScreenState extends State<EditScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _openDesignSelection,
-                        icon: const Icon(Icons.palette),
-                        label: Text(
-                          _selectedDesign?.color != null
-                              ? 'Дизайн: ${_selectedDesign!.color!.name}'
-                              : 'Выбрать дизайн',
-                          style: const TextStyle(fontSize: 16),
+                    // НОВОЕ: Дизайн (уже не на всю ширину) + кнопка 3D справа
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _openDesignSelection,
+                            icon: const Icon(Icons.palette, size: 20),
+                            label: Text(
+                              _selectedDesign?.color != null
+                                  ? _selectedDesign!.color!.name
+                                  : 'Выбрать дизайн',
+                              style: const TextStyle(fontSize: 15),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              backgroundColor: Colors.pink,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
                         ),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          backgroundColor: Colors.pink,
-                          foregroundColor: Colors.white,
+                        const SizedBox(width: 8),
+                        // Кнопка 3D: меняет цвет в активном состоянии
+                        GestureDetector(
+                          onTap: () => setState(() => _show3D = !_show3D),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            width: 64,
+                            height: 50,
+                            decoration: BoxDecoration(
+                              color: _show3D ? Colors.pink : Colors.white10,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: _show3D ? Colors.pink : Colors.white38,
+                                width: 2,
+                              ),
+                              boxShadow: _show3D
+                                  ? [
+                                      BoxShadow(
+                                        color: Colors.pink.withOpacity(0.5),
+                                        blurRadius: 8,
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: const Center(
+                              child: Text(
+                                '3D',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                     const SizedBox(height: 8),
 
+                    // Формы
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: NailShape.values.map((shape) {
@@ -421,119 +425,8 @@ class _EditScreenState extends State<EditScreen> {
                     ),
                     const SizedBox(height: 8),
 
-                    _buildAdvancedToggle(),
-
-                    if (_showAdvanced) ...[
-                      _groupTitle('Цвет', Icons.palette),
-                      Row(
-                        children: [
-                          const Icon(Icons.layers, color: Colors.white, size: 18),
-                          const SizedBox(width: 6),
-                          SizedBox(
-                            width: 70,
-                            child: Text(
-                              'Слои: ${_density.toInt()}',
-                              style: const TextStyle(color: Colors.white, fontSize: 11),
-                            ),
-                          ),
-                          Expanded(
-                            child: Slider(
-                              value: _density,
-                              min: 1,
-                              max: 3,
-                              divisions: 2,
-                              activeColor: Colors.pink,
-                              inactiveColor: Colors.white24,
-                              onChanged: (value) => setState(() => _density = value),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          const Icon(Icons.brightness_6, color: Colors.white, size: 18),
-                          const SizedBox(width: 6),
-                          const SizedBox(
-                            width: 70,
-                            child: Text(
-                              'Яркость',
-                              style: TextStyle(color: Colors.white, fontSize: 11),
-                            ),
-                          ),
-                          Expanded(
-                            child: Slider(
-                              value: _brightness,
-                              min: 0.7,
-                              max: 1.3,
-                              activeColor: Colors.pink,
-                              inactiveColor: Colors.white24,
-                              onChanged: (value) => setState(() => _brightness = value),
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      _groupTitle('Рамка', Icons.crop),
-                      Row(
-                        children: [
-                          const Icon(Icons.swap_horiz, color: Colors.white, size: 18),
-                          const SizedBox(width: 6),
-                          const Text('Ширина',
-                              style: TextStyle(color: Colors.white, fontSize: 11)),
-                          Expanded(
-                            child: Slider(
-                              value: _frameWidth,
-                              min: 40,
-                              max: 300,
-                              activeColor: Colors.pink,
-                              inactiveColor: Colors.white24,
-                              onChanged: (value) => setState(() => _frameWidth = value),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          const Icon(Icons.swap_vert, color: Colors.white, size: 18),
-                          const SizedBox(width: 6),
-                          const Text('Высота',
-                              style: TextStyle(color: Colors.white, fontSize: 11)),
-                          Expanded(
-                            child: Slider(
-                              value: _frameHeight,
-                              min: 40,
-                              max: 400,
-                              activeColor: Colors.pink,
-                              inactiveColor: Colors.white24,
-                              onChanged: (value) => setState(() => _frameHeight = value),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          const Icon(Icons.rotate_right, color: Colors.white, size: 18),
-                          const SizedBox(width: 6),
-                          SizedBox(
-                            width: 70,
-                            child: Text(
-                              'Поворот: ${_rotation.toInt()}°',
-                              style: const TextStyle(color: Colors.white, fontSize: 11),
-                            ),
-                          ),
-                          Expanded(
-                            child: Slider(
-                              value: _rotation,
-                              min: -180,
-                              max: 180,
-                              activeColor: Colors.pink,
-                              inactiveColor: Colors.white24,
-                              onChanged: (value) => setState(() => _rotation = value),
-                            ),
-                          ),
-                        ],
-                      ),
-
+                    // РЕЖИМ 3D: только 3D-ползунки
+                    if (_show3D) ...[
                       _groupTitle('3D-эффект', Icons.view_in_ar),
                       Row(
                         children: [
@@ -596,6 +489,116 @@ class _EditScreenState extends State<EditScreen> {
                               inactiveColor: Colors.white24,
                               onChanged: (value) =>
                                   setState(() => _shadowIntensity = value),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+
+                    // ОБЫЧНЫЙ РЕЖИМ: прежние настройки всегда открыты
+                    if (!_show3D) ...[
+                      Row(
+                        children: [
+                          const Icon(Icons.layers, color: Colors.white, size: 18),
+                          const SizedBox(width: 6),
+                          SizedBox(
+                            width: 70,
+                            child: Text(
+                              'Слои: ${_density.toInt()}',
+                              style: const TextStyle(color: Colors.white, fontSize: 11),
+                            ),
+                          ),
+                          Expanded(
+                            child: Slider(
+                              value: _density,
+                              min: 1,
+                              max: 3,
+                              divisions: 2,
+                              activeColor: Colors.pink,
+                              inactiveColor: Colors.white24,
+                              onChanged: (value) => setState(() => _density = value),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          const Icon(Icons.brightness_6, color: Colors.white, size: 18),
+                          const SizedBox(width: 6),
+                          const SizedBox(
+                            width: 70,
+                            child: Text(
+                              'Яркость',
+                              style: TextStyle(color: Colors.white, fontSize: 11),
+                            ),
+                          ),
+                          Expanded(
+                            child: Slider(
+                              value: _brightness,
+                              min: 0.7,
+                              max: 1.3,
+                              activeColor: Colors.pink,
+                              inactiveColor: Colors.white24,
+                              onChanged: (value) => setState(() => _brightness = value),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          const Icon(Icons.swap_horiz, color: Colors.white, size: 18),
+                          const SizedBox(width: 6),
+                          const Text('Ширина',
+                              style: TextStyle(color: Colors.white, fontSize: 11)),
+                          Expanded(
+                            child: Slider(
+                              value: _frameWidth,
+                              min: 40,
+                              max: 300,
+                              activeColor: Colors.pink,
+                              inactiveColor: Colors.white24,
+                              onChanged: (value) => setState(() => _frameWidth = value),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          const Icon(Icons.swap_vert, color: Colors.white, size: 18),
+                          const SizedBox(width: 6),
+                          const Text('Высота',
+                              style: TextStyle(color: Colors.white, fontSize: 11)),
+                          Expanded(
+                            child: Slider(
+                              value: _frameHeight,
+                              min: 40,
+                              max: 400,
+                              activeColor: Colors.pink,
+                              inactiveColor: Colors.white24,
+                              onChanged: (value) => setState(() => _frameHeight = value),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          const Icon(Icons.rotate_right, color: Colors.white, size: 18),
+                          const SizedBox(width: 6),
+                          SizedBox(
+                            width: 70,
+                            child: Text(
+                              'Поворот: ${_rotation.toInt()}°',
+                              style: const TextStyle(color: Colors.white, fontSize: 11),
+                            ),
+                          ),
+                          Expanded(
+                            child: Slider(
+                              value: _rotation,
+                              min: -180,
+                              max: 180,
+                              activeColor: Colors.pink,
+                              inactiveColor: Colors.white24,
+                              onChanged: (value) => setState(() => _rotation = value),
                             ),
                           ),
                         ],

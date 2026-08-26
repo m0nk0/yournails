@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/nail_color.dart';
 import '../services/design_sets_service.dart';
+import '../services/custom_color_service.dart';
+import 'color_mixer_screen.dart';
 
 class ColorPickerScreen extends StatefulWidget {
   final NailColor? selectedColor;
@@ -15,12 +17,34 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final List<NailColor> _allColors = DesignSetsService.getColors();
-  final List<ColorGroup> _groups = DesignSetsService.groups;
+  List<NailColor> _customColors = [];
+
+  // Группы + вкладка "Мои цвета"
+  final List<ColorGroup> _groups = const [
+    ColorGroup(id: 'all', name: 'Все', icon: '🎨'),
+    ColorGroup(id: 'red', name: 'Красные', icon: '🔴'),
+    ColorGroup(id: 'pink', name: 'Розовые', icon: '🌸'),
+    ColorGroup(id: 'nude', name: 'Нюд', icon: '🤍'),
+    ColorGroup(id: 'purple', name: 'Фиолет', icon: '🟣'),
+    ColorGroup(id: 'blue', name: 'Синие', icon: '🔵'),
+    ColorGroup(id: 'green', name: 'Зелёные', icon: '🟢'),
+    ColorGroup(id: 'yellow', name: 'Жёлтые', icon: '🟡'),
+    ColorGroup(id: 'dark', name: 'Тёмные', icon: '⚫'),
+    ColorGroup(id: 'my', name: 'Мои цвета', icon: '💾'),
+  ];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: _groups.length, vsync: this);
+    _loadCustom();
+  }
+
+  Future<void> _loadCustom() async {
+    final custom = await CustomColorService.load();
+    if (mounted) {
+      setState(() => _customColors = custom);
+    }
   }
 
   @override
@@ -30,12 +54,25 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
   }
 
   List<NailColor> _colorsForGroup(String groupId) {
-    if (groupId == 'all') return _allColors;
+    if (groupId == 'all') return [..._allColors, ..._customColors];
+    if (groupId == 'my') return _customColors;
     return _allColors.where((c) => c.group == groupId).toList();
   }
 
-  void _selectColor(NailColor color) {
-    Navigator.pop(context, color);
+  Future<void> _openMixer() async {
+    final res = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ColorMixerScreen()),
+    );
+    if (res != null && res is NailColor) {
+      // Применяем смешанный цвет сразу
+      if (mounted) Navigator.pop(context, res);
+    }
+  }
+
+  Future<void> _deleteCustom(NailColor color) async {
+    await CustomColorService.delete(color.id);
+    await _loadCustom();
   }
 
   @override
@@ -45,6 +82,13 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
         title: const Text('Выбор цвета', style: TextStyle(fontSize: 22)),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.colorize, size: 26),
+            tooltip: 'Смешать цвета',
+            onPressed: _openMixer,
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
@@ -74,6 +118,20 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
         controller: _tabController,
         children: _groups.map((g) {
           final colors = _colorsForGroup(g.id);
+
+          if (colors.isEmpty) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Text(
+                  'Пока пусто.\nСмешайте цвет (иконка 🧪 сверху) и сохраните в "Мои цвета".',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                ),
+              ),
+            );
+          }
+
           return GridView.builder(
             padding: const EdgeInsets.all(16),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -86,9 +144,11 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
             itemBuilder: (context, index) {
               final color = colors[index];
               final isSelected = widget.selectedColor?.id == color.id;
+              final isCustom = color.group == 'my';
 
               return GestureDetector(
-                onTap: () => _selectColor(color),
+                onTap: () => Navigator.pop(context, color),
+                onLongPress: isCustom ? () => _deleteCustom(color) : null,
                 child: Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
@@ -100,7 +160,6 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Цвет — ИСПРАВЛЕНО: растягиваем на всю ширину
                       Expanded(
                         child: Container(
                           width: double.infinity,
@@ -117,7 +176,6 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
                               : null,
                         ),
                       ),
-                      // Название
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(vertical: 8),

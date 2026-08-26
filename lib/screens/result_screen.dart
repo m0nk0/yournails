@@ -60,7 +60,6 @@ class _ResultScreenState extends State<ResultScreen> {
     final canvas = Canvas(recorder);
     canvas.scale(ratio);
 
-    // Фото: contain + зум от центра + смещение
     final s = math.min(W / photo.width, H / photo.height);
     final double w = photo.width * s * widget.imageScale;
     final double h = photo.height * s * widget.imageScale;
@@ -93,7 +92,7 @@ class _ResultScreenState extends State<ResultScreen> {
               design.shape, zone.width, zone.height)
           .toRRect(rect);
 
-      // НОВОЕ: тень под ногтем
+      // Тень под ногтем
       if (design.shadowIntensity > 0) {
         final shadowPaint = Paint()
           ..color = Colors.black.withOpacity(design.shadowIntensity * 0.5)
@@ -113,7 +112,7 @@ class _ResultScreenState extends State<ResultScreen> {
         Paint()..color = render.color.withOpacity(render.opacity),
       );
 
-      // НОВОЕ: Слой 2: объём (края темнее)
+      // Слой 2: радиальный объём
       if (design.edgeDarken > 0) {
         final edgePaint = Paint()
           ..shader = RadialGradient(
@@ -128,7 +127,63 @@ class _ResultScreenState extends State<ResultScreen> {
         canvas.drawRect(rect, edgePaint);
       }
 
-      // НОВОЕ: Слой 3: блик сверху-слева
+      // Слой 3: рисунок
+      if (design.hasPatternDraw) {
+        canvas.save();
+        canvas.translate(rect.left, rect.top);
+        NailPatternPainter(design.pattern)
+            .paint(canvas, Size(zone.width, zone.height));
+        canvas.restore();
+      }
+
+      // Слой 4: PNG-картинка
+      if (design.hasPattern) {
+        final pBytes = await File(design.patternPath!).readAsBytes();
+        final pCompleter = Completer<ui.Image>();
+        ui.decodeImageFromList(pBytes, (i) => pCompleter.complete(i));
+        final pImg = await pCompleter.future;
+        canvas.drawImageRect(
+          pImg,
+          Rect.fromLTWH(0, 0, pImg.width.toDouble(), pImg.height.toDouble()),
+          rect,
+          Paint(),
+        );
+      }
+
+      // НОВОЕ Слой 5: C-изгиб (бока темнее)
+      if (design.edgeDarken > 0) {
+        final cPaint = Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [
+              Colors.black.withOpacity(design.edgeDarken * 0.45),
+              Colors.transparent,
+              Colors.transparent,
+              Colors.black.withOpacity(design.edgeDarken * 0.45),
+            ],
+            stops: const [0.0, 0.25, 0.75, 1.0],
+          ).createShader(rect);
+        canvas.drawRect(rect, cPaint);
+      }
+
+      // НОВОЕ Слой 6: световая колонна
+      if (design.highlightIntensity > 0) {
+        final lPaint = Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [
+              Colors.transparent,
+              Colors.white.withOpacity(design.highlightIntensity * 0.35),
+              Colors.transparent,
+            ],
+            stops: const [0.35, 0.5, 0.65],
+          ).createShader(rect);
+        canvas.drawRect(rect, lPaint);
+      }
+
+      // Слой 7: блик сверху-слева
       if (design.highlightIntensity > 0) {
         final hlPaint = Paint()
           ..shader = LinearGradient(
@@ -144,30 +199,7 @@ class _ResultScreenState extends State<ResultScreen> {
         canvas.drawRect(rect, hlPaint);
       }
 
-      // Слой 4: рисунок
-      if (design.hasPatternDraw) {
-        canvas.save();
-        canvas.translate(rect.left, rect.top);
-        NailPatternPainter(design.pattern)
-            .paint(canvas, Size(zone.width, zone.height));
-        canvas.restore();
-      }
-
-      // Слой 5: PNG-картинка
-      if (design.hasPattern) {
-        final pBytes = await File(design.patternPath!).readAsBytes();
-        final pCompleter = Completer<ui.Image>();
-        ui.decodeImageFromList(pBytes, (i) => pCompleter.complete(i));
-        final pImg = await pCompleter.future;
-        canvas.drawImageRect(
-          pImg,
-          Rect.fromLTWH(0, 0, pImg.width.toDouble(), pImg.height.toDouble()),
-          rect,
-          Paint(),
-        );
-      }
-
-      // Слой 6: глянец
+      // Слой 8: глянец
       if (material?.hasGloss ?? false) {
         final gi = material?.glossIntensity ?? 0.5;
         final glossPaint = Paint()
@@ -236,7 +268,6 @@ class _ResultScreenState extends State<ResultScreen> {
         brightness: design.brightness,
         patternType: design.pattern.isNone ? null : design.pattern.type.name,
         patternColor: design.pattern.isNone ? null : design.pattern.color.value,
-        // НОВОЕ: сохраняем 3D-параметры в рецепт
         edgeDarken: design.edgeDarken,
         highlightIntensity: design.highlightIntensity,
         shadowIntensity: design.shadowIntensity,
@@ -405,7 +436,6 @@ class _ResultScreenState extends State<ResultScreen> {
       ),
       body: Stack(
         children: [
-          // Фото на весь экран
           Positioned.fill(
             child: Transform.translate(
               offset: widget.imageOffset,
@@ -419,7 +449,6 @@ class _ResultScreenState extends State<ResultScreen> {
             ),
           ),
 
-          // НОВОЕ: 3D-ноготь через общий рендерер
           Positioned(
             left: zone.x - zone.width / 2,
             top: zone.y - zone.height / 2,
@@ -433,7 +462,6 @@ class _ResultScreenState extends State<ResultScreen> {
             ),
           ),
 
-          // Панель поверх
           Positioned(
             bottom: 0,
             left: 0,

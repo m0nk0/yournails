@@ -1,4 +1,4 @@
-import 'dart:io'; // ИСПРАВЛЕНО: добавлен импорт для File
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/selected_design.dart';
 import '../models/nail_shape.dart';
@@ -29,7 +29,6 @@ class Nail3DRenderer extends StatelessWidget {
       height: height,
       decoration: BoxDecoration(
         borderRadius: borderRadius,
-        // Тень под ногтем (drop shadow)
         boxShadow: design.shadowIntensity > 0
             ? [
                 BoxShadow(
@@ -44,7 +43,7 @@ class Nail3DRenderer extends StatelessWidget {
         borderRadius: borderRadius,
         child: Stack(
           children: [
-            // Слой 1: базовый цвет с opacity
+            // Слой 1: базовый цвет
             Positioned.fill(
               child: Opacity(
                 opacity: render.opacity,
@@ -52,7 +51,7 @@ class Nail3DRenderer extends StatelessWidget {
               ),
             ),
 
-            // Слой 2: радиальный градиент для объёма (края темнее)
+            // Слой 2: радиальный объём (края темнее)
             if (design.edgeDarken > 0)
               Positioned.fill(
                 child: Container(
@@ -71,7 +70,66 @@ class Nail3DRenderer extends StatelessWidget {
                 ),
               ),
 
-            // Слой 3: блик сверху-слева
+            // Слой 3: рисунок
+            if (design.hasPatternDraw)
+              Positioned.fill(
+                child: NailPatternLayer(pattern: design.pattern),
+              ),
+
+            // Слой 4: PNG-картинка
+            if (design.hasPattern)
+              Positioned.fill(
+                child: Image.file(
+                  File(design.patternPath!),
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return const SizedBox.shrink();
+                  },
+                ),
+              ),
+
+            // НОВОЕ Слой 5: C-изгиб (боковые грани темнее)
+            if (design.edgeDarken > 0)
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: borderRadius,
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        Colors.black.withOpacity(design.edgeDarken * 0.45),
+                        Colors.transparent,
+                        Colors.transparent,
+                        Colors.black.withOpacity(design.edgeDarken * 0.45),
+                      ],
+                      stops: const [0.0, 0.25, 0.75, 1.0],
+                    ),
+                  ),
+                ),
+              ),
+
+            // НОВОЕ Слой 6: световая колонна (светлая полоса по центру)
+            if (design.highlightIntensity > 0)
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: borderRadius,
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        Colors.transparent,
+                        Colors.white.withOpacity(design.highlightIntensity * 0.35),
+                        Colors.transparent,
+                      ],
+                      stops: const [0.35, 0.5, 0.65],
+                    ),
+                  ),
+                ),
+              ),
+
+            // Слой 7: блик сверху-слева
             if (design.highlightIntensity > 0)
               Positioned.fill(
                 child: Container(
@@ -91,25 +149,7 @@ class Nail3DRenderer extends StatelessWidget {
                 ),
               ),
 
-            // Слой 4: рисунок (френч, омбре и т.д.)
-            if (design.hasPatternDraw)
-              Positioned.fill(
-                child: NailPatternLayer(pattern: design.pattern),
-              ),
-
-            // Слой 5: PNG-картинка
-            if (design.hasPattern)
-              Positioned.fill(
-                child: Image.file(
-                  File(design.patternPath!),
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return const SizedBox.shrink();
-                  },
-                ),
-              ),
-
-            // Слой 6: глянец материала (если есть)
+            // Слой 8: глянец материала
             if (material?.hasGloss ?? false)
               Positioned.fill(
                 child: Container(

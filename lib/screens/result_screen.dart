@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:gal/gal.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../models/client.dart';
@@ -60,6 +61,7 @@ class _ResultScreenState extends State<ResultScreen> {
     final canvas = Canvas(recorder);
     canvas.scale(ratio);
 
+    // Фото: contain + зум от центра + смещение
     final s = math.min(W / photo.width, H / photo.height);
     final double w = photo.width * s * widget.imageScale;
     final double h = photo.height * s * widget.imageScale;
@@ -150,7 +152,7 @@ class _ResultScreenState extends State<ResultScreen> {
         );
       }
 
-      // НОВОЕ Слой 5: C-изгиб (бока темнее)
+      // Слой 5: C-изгиб (боковые грани темнее)
       if (design.edgeDarken > 0) {
         final cPaint = Paint()
           ..shader = LinearGradient(
@@ -167,7 +169,7 @@ class _ResultScreenState extends State<ResultScreen> {
         canvas.drawRect(rect, cPaint);
       }
 
-            // Слой 6: световая колонна — ШИРЕ и РАЗМЫТЕЕ
+      // Слой 6: световая колонна — шире, размытее, яркость 0.45
       if (design.highlightIntensity > 0) {
         final lPaint = Paint()
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10)
@@ -200,7 +202,7 @@ class _ResultScreenState extends State<ResultScreen> {
         canvas.drawRect(rect, hlPaint);
       }
 
-      // Слой 8: глянец
+      // Слой 8: глянец материала
       if (material?.hasGloss ?? false) {
         final gi = material?.glossIntensity ?? 0.5;
         final glossPaint = Paint()
@@ -224,6 +226,34 @@ class _ResultScreenState extends State<ResultScreen> {
     final img = await picture.toImage((W * ratio).round(), (H * ratio).round());
     final data = await img.toByteData(format: ui.ImageByteFormat.png);
     return data!.buffer.asUint8List();
+  }
+
+  /// Сохранить примерку в галерею устройства
+  Future<void> _saveToGallery() async {
+    setState(() => _isSaving = true);
+    try {
+      final bytes = await _renderTryOnImage(withDesign: true);
+      await Gal.putImageBytes(bytes);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Сохранено в галерею'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      setState(() => _isSaving = false);
+    }
   }
 
   Future<void> _saveToCollection() async {
@@ -437,6 +467,7 @@ class _ResultScreenState extends State<ResultScreen> {
       ),
       body: Stack(
         children: [
+          // Фото на весь экран
           Positioned.fill(
             child: Transform.translate(
               offset: widget.imageOffset,
@@ -450,6 +481,7 @@ class _ResultScreenState extends State<ResultScreen> {
             ),
           ),
 
+          // 3D-ноготь
           Positioned(
             left: zone.x - zone.width / 2,
             top: zone.y - zone.height / 2,
@@ -463,6 +495,7 @@ class _ResultScreenState extends State<ResultScreen> {
             ),
           ),
 
+          // Панель поверх
           Positioned(
             bottom: 0,
             left: 0,
@@ -533,18 +566,34 @@ class _ResultScreenState extends State<ResultScreen> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _saveToCollection,
-                      icon: const Icon(Icons.bookmark_add),
-                      label: const Text('В коллекцию'),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        foregroundColor: Colors.white,
-                        side: const BorderSide(color: Colors.white54),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _saveToCollection,
+                          icon: const Icon(Icons.bookmark_add),
+                          label: const Text('В коллекцию'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            foregroundColor: Colors.white,
+                            side: const BorderSide(color: Colors.white54),
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _isSaving ? null : _saveToGallery,
+                          icon: const Icon(Icons.download),
+                          label: const Text('В галерею'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            foregroundColor: Colors.white,
+                            side: const BorderSide(color: Colors.white54),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

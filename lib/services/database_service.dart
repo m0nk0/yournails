@@ -1,3 +1,5 @@
+// lib/services/database_service.dart
+
 import 'dart:io';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
@@ -5,17 +7,22 @@ import 'package:uuid/uuid.dart';
 import '../models/client.dart';
 import '../models/nail_session.dart';
 import '../models/my_design.dart';
+import '../models/master.dart';
 
 /// Сервис работы с локальной базой данных.
 /// Использует Hive для хранения данных и файловую систему для фото.
 class DatabaseService {
-  static const String _clientsBox = 'clients';
+    static const String _clientsBox = 'clients';
   static const String _sessionsBox = 'sessions';
   static const String _myDesignsBox = 'my_designs';
+  static const String _mastersBox = 'masters';
+  static const String _settingsBox = 'settings';
 
   static late Box _clients;
   static late Box _sessions;
   static late Box _myDesigns;
+  static late Box _masters;
+  static late Box _settings;
 
   /// Инициализация БД (вызывается в main.dart)
   static Future<void> init() async {
@@ -23,6 +30,84 @@ class DatabaseService {
     _clients = await Hive.openBox(_clientsBox);
     _sessions = await Hive.openBox(_sessionsBox);
     _myDesigns = await Hive.openBox(_myDesignsBox);
+    _masters = await Hive.openBox(_mastersBox);
+    _settings = await Hive.openBox(_settingsBox);
+  }
+
+  // ============ НАСТРОЙКИ ============
+
+  /// Был ли онбординг пропущен (режим клиента)
+  static bool get isOnboardingSkipped => _settings.get('skip_onboarding', defaultValue: false) as bool;
+
+  /// Установить флаг пропуска онбординга
+  static Future<void> setOnboardingSkipped(bool value) async {
+    await _settings.put('skip_onboarding', value);
+  }
+
+  // ============ МАСТЕРА ============ // ← НОВЫЙ РАЗДЕЛ
+
+  /// Добавить мастера
+  static Future<Master> addMaster({
+    required String name,
+    String? iconPath,
+    String? iconName,
+    bool isCustomIcon = false,
+  }) async {
+    final master = Master(
+      id: const Uuid().v4(),
+      name: name,
+      iconPath: iconPath,
+      iconName: iconName,
+      isCustomIcon: isCustomIcon,
+      createdAt: DateTime.now(),
+    );
+    await _masters.put(master.id, master.toMap());
+    return master;
+  }
+
+  /// Получить всех мастеров (отсортированных по дате)
+  static List<Master> getMasters() {
+    final list = <Master>[];
+    for (final key in _masters.keys) {
+      final map = _masters.get(key);
+      if (map != null) {
+        list.add(Master.fromMap(Map<String, dynamic>.from(map)));
+      }
+    }
+    list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return list;
+  }
+
+  /// Получить мастера по id
+  static Master? getMaster(String id) {
+    final map = _masters.get(id);
+    if (map == null) return null;
+    return Master.fromMap(Map<String, dynamic>.from(map));
+  }
+
+  /// Обновить мастера
+  static Future<void> updateMaster(Master master) async {
+    await _masters.put(master.id, master.toMap());
+  }
+
+  /// Удалить мастера
+  static Future<void> deleteMaster(String id) async {
+    final map = _masters.get(id);
+    if (map != null) {
+      final master = Master.fromMap(Map<String, dynamic>.from(map));
+      // Если это своя картинка — удаляем файл
+      if (master.isCustomIcon && master.iconPath != null) {
+        final file = File(master.iconPath!);
+        if (await file.exists()) await file.delete();
+      }
+    }
+    await _masters.delete(id);
+  }
+
+  /// Получить активного мастера (первого в списке или null)
+  static Master? getActiveMaster() {
+    final masters = getMasters();
+    return masters.isNotEmpty ? masters.first : null;
   }
 
   // ============ КЛИЕНТЫ ============

@@ -40,6 +40,8 @@ dependencies:
 
   flutter_quick_video_encoder: ^1.7.2
 
+  flutter_svg: ^2.0.10+1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -48,6 +50,5 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # Временно закомментировано — раскомментируем когда добавим PNG
-  # assets:
-  #   - assets/designs/
+  assets:
+    - assets/logo.svg

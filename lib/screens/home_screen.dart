@@ -1,7 +1,11 @@
+// lib/screens/home_screen.dart
+
 import 'package:flutter/material.dart';
 import 'camera_screen.dart';
 import 'clients_screen.dart';
 import 'my_designs_screen.dart';
+import 'manage_masters_screen.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -10,9 +14,24 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('YourNails'),
+        title: const Text('Твои Ноготочки'),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
+                actions: [
+          TextButton.icon(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ManageMastersScreen()),
+            ),
+            icon: const Icon(Icons.people_alt, size: 20),
+            label: const Text(
+              'Мастера',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+            style: TextButton.styleFrom(foregroundColor: Colors.white),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),
@@ -20,10 +39,14 @@ class HomeScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // Логотип
-            const Icon(Icons.auto_awesome, size: 100, color: Colors.pink),
+              SvgPicture.asset(
+              'assets/logo.svg',
+              width: 160,
+              height: 160,
+            ),
             const SizedBox(height: 16),
             const Text(
-              'YourNails',
+              'Твои Ноготочки',
               style: TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.bold,
@@ -32,7 +55,7 @@ class HomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Примерка дизайна ногтей',
+              'Цифровая студия nail-арта',
               style: TextStyle(fontSize: 18, color: Colors.grey[600]),
             ),
             const SizedBox(height: 40),

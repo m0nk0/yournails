@@ -82,12 +82,17 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
         title: const Text('Выбор цвета', style: TextStyle(fontSize: 22)),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.colorize, size: 26),
-            tooltip: 'Смешать цвета',
+               actions: [
+          TextButton.icon(
             onPressed: _openMixer,
+            icon: const Icon(Icons.palette, size: 20),
+            label: const Text(
+              'Миксер',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+            style: TextButton.styleFrom(foregroundColor: Colors.white),
           ),
+          const SizedBox(width: 8),
         ],
         bottom: TabBar(
           controller: _tabController,

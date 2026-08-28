@@ -38,6 +38,8 @@ dependencies:
 
   gal: ^2.3.0
 
+  flutter_quick_video_encoder: ^1.7.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

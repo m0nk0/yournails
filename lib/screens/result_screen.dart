@@ -17,6 +17,8 @@ import '../services/database_service.dart';
 import '../widgets/home_app_bar.dart';
 import '../widgets/nail_pattern_layer.dart';
 import '../widgets/nail_3d_renderer.dart';
+import '../painters/nail_path.dart';
+import '../painters/socket_groove.dart';
 
 class ResultScreen extends StatefulWidget {
   final File imageFile;
@@ -93,6 +95,17 @@ class _ResultScreenState extends State<ResultScreen> {
       final rrect = NailShapeHelper.getBorderRadius(
               design.shape, zone.width, zone.height)
           .toRRect(rect);
+
+      // === ЛУНКА (бороздка вокруг ногтя, до clip) ===
+      if (design.cuticleWidth > 0.02) {
+        canvas.save();
+        canvas.translate(-zone.width / 2, -zone.height / 2);
+        final nailPath =
+            buildNailPath(zone.width, zone.height, design.shape);
+        drawSocketGroove(
+            canvas, nailPath, Size(zone.width, zone.height), design);
+        canvas.restore();
+      }
 
       // Тень под ногтем
       if (design.shadowIntensity > 0) {

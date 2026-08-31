@@ -23,10 +23,16 @@ class SelectedDesign {
   final String? patternPath;
   final String? patternName;
 
-  // НОВОЕ: 3D-параметры
-  final double edgeDarken;      // 0.0-1.0: затемнение краёв (объём)
-  final double highlightIntensity; // 0.0-1.0: блик сверху
-  final double shadowIntensity;    // 0.0-1.0: тень под ногтем
+  // 3D-параметры
+  final double edgeDarken;
+  final double highlightIntensity;
+  final double shadowIntensity;
+
+  // Кутикула (лунка вокруг ногтя)
+  final double cuticleWidth;  // 0..1: ширина бороздки
+  final double cuticleDepth;  // 0..1: темнее/светлее
+  final double cuticleLength; // 0..1: как высоко поднимается к верху ногтя
+  final int cuticleTone;      // 0..3: тон кожи
 
   SelectedDesign({
     this.color,
@@ -40,6 +46,10 @@ class SelectedDesign {
     this.edgeDarken = 0.3,
     this.highlightIntensity = 0.5,
     this.shadowIntensity = 0.4,
+    this.cuticleWidth = 0.5,
+    this.cuticleDepth = 0.5,
+    this.cuticleLength = 0.8,
+    this.cuticleTone = 1,
   });
 
   bool get hasColor => color != null;

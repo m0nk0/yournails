@@ -7,6 +7,8 @@ import '../models/nail_shape.dart';
 import '../models/nail_pattern.dart';
 import '../widgets/home_app_bar.dart';
 import '../widgets/nail_3d_renderer.dart';
+import '../painters/realistic_nail_painter.dart';
+import '../painters/socket_groove.dart';
 import 'result_screen.dart';
 import 'design_selection_screen.dart';
 
@@ -38,11 +40,24 @@ class _EditScreenState extends State<EditScreen> {
   double _highlightIntensity = 0.5;
   double _shadowIntensity = 0.4;
 
-  // Показывать ли розовую рамку
+  // Параметры лунки (кутикулы)
+  double _cuticleWidth = 1.0;
+  double _cuticleDepth = 0.5;
+  double _cuticleLength = 0.8;
+  int _cuticleTone = 1;
+
+  // Режим панели: 0 = базовый, 1 = 3D, 2 = кутикула
+  int _mode = 0;
+
+  // Рамка
   bool _showFrame = true;
 
-  // Режим 3D-настроек
-  bool _show3D = false;
+  // Слои (как в фотошопе)
+  bool _showNailLayer = true;
+  bool _showCuticleLayer = true;
+  bool _showBgLayer = true;
+  bool _lockNail = false;
+  bool _lockBg = false;
 
   bool _initialized = false;
 
@@ -67,25 +82,31 @@ class _EditScreenState extends State<EditScreen> {
     });
   }
 
+  SelectedDesign _buildCurrentDesign() {
+    return SelectedDesign(
+      color: _selectedDesign?.color,
+      material: _selectedDesign?.material,
+      shape: _shape,
+      density: _density,
+      brightness: _brightness,
+      pattern: _pattern,
+      patternPath: _selectedDesign?.patternPath,
+      patternName: _selectedDesign?.patternName,
+      edgeDarken: _edgeDarken,
+      highlightIntensity: _highlightIntensity,
+      shadowIntensity: _shadowIntensity,
+      cuticleWidth: _cuticleWidth,
+      cuticleDepth: _cuticleDepth,
+      cuticleLength: _cuticleLength,
+      cuticleTone: _cuticleTone,
+    );
+  }
+
   Future<void> _openDesignSelection() async {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => DesignSelectionScreen(
-          currentDesign: SelectedDesign(
-            color: _selectedDesign?.color,
-            material: _selectedDesign?.material,
-            shape: _shape,
-            density: _density,
-            brightness: _brightness,
-            pattern: _pattern,
-            patternPath: _selectedDesign?.patternPath,
-            patternName: _selectedDesign?.patternName,
-            edgeDarken: _edgeDarken,
-            highlightIntensity: _highlightIntensity,
-            shadowIntensity: _shadowIntensity,
-          ),
-        ),
+        builder: (_) => DesignSelectionScreen(currentDesign: _buildCurrentDesign()),
       ),
     );
 
@@ -99,6 +120,10 @@ class _EditScreenState extends State<EditScreen> {
         _edgeDarken = result.edgeDarken;
         _highlightIntensity = result.highlightIntensity;
         _shadowIntensity = result.shadowIntensity;
+        _cuticleWidth = result.cuticleWidth;
+        _cuticleDepth = result.cuticleDepth;
+        _cuticleLength = result.cuticleLength;
+        _cuticleTone = result.cuticleTone;
       });
     }
   }
@@ -136,6 +161,10 @@ class _EditScreenState extends State<EditScreen> {
       edgeDarken: _edgeDarken,
       highlightIntensity: _highlightIntensity,
       shadowIntensity: _shadowIntensity,
+      cuticleWidth: _cuticleWidth,
+      cuticleDepth: _cuticleDepth,
+      cuticleLength: _cuticleLength,
+      cuticleTone: _cuticleTone,
     );
 
     Navigator.push(
@@ -153,7 +182,8 @@ class _EditScreenState extends State<EditScreen> {
   }
 
   Widget _buildNailPreview() {
-    final borderRadius = NailShapeHelper.getBorderRadius(_shape, _frameWidth, _frameHeight);
+    final borderRadius =
+        NailShapeHelper.getBorderRadius(_shape, _frameWidth, _frameHeight);
     final frameBorder = _showFrame ? Border.all(color: Colors.pink, width: 3) : null;
 
     if (_selectedDesign == null || !_selectedDesign!.hasColor) {
@@ -171,29 +201,17 @@ class _EditScreenState extends State<EditScreen> {
       );
     }
 
-    final renderDesign = SelectedDesign(
-      color: _selectedDesign!.color,
-      material: _selectedDesign!.material,
-      shape: _shape,
-      density: _density,
-      brightness: _brightness,
-      pattern: _pattern,
-      patternPath: _selectedDesign!.patternPath,
-      patternName: _selectedDesign!.patternName,
-      edgeDarken: _edgeDarken,
-      highlightIntensity: _highlightIntensity,
-      shadowIntensity: _shadowIntensity,
-    );
-
     return Container(
       decoration: BoxDecoration(
         border: frameBorder,
         borderRadius: borderRadius,
       ),
       child: Nail3DRenderer(
-        design: renderDesign,
+        design: _buildCurrentDesign(),
         width: _frameWidth,
         height: _frameHeight,
+        showNail: _showNailLayer,
+        showCuticle: _showCuticleLayer,
       ),
     );
   }
@@ -218,29 +236,97 @@ class _EditScreenState extends State<EditScreen> {
     );
   }
 
+  Widget _sliderRow(IconData icon, String label, double value, double min,
+      double max, ValueChanged<double> onChanged,
+      {int? divisions}) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.white, size: 18),
+        const SizedBox(width: 6),
+        SizedBox(
+          width: 70,
+          child: Text(
+            label,
+            style: const TextStyle(color: Colors.white, fontSize: 11),
+          ),
+        ),
+        Expanded(
+          child: Slider(
+            value: value,
+            min: min,
+            max: max,
+            divisions: divisions,
+            activeColor: Colors.pink,
+            inactiveColor: Colors.white24,
+            onChanged: onChanged,
+          ),
+        ),
+      ],
+    );
+  }
+
+    /// Строка панели слоёв (крупная, как в фотошопе)
+  Widget _layerRow(String name, IconData icon, bool visible, bool? locked,
+      VoidCallback onToggleVisible, VoidCallback? onToggleLock) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 9),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            onTap: onToggleVisible,
+            child: Icon(
+              visible ? Icons.visibility : Icons.visibility_off,
+              color: visible ? Colors.white : Colors.white38,
+              size: 26,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Icon(icon, color: Colors.white70, size: 20),
+          const SizedBox(width: 6),
+          Text(name, style: const TextStyle(color: Colors.white, fontSize: 14)),
+          const SizedBox(width: 10),
+          if (onToggleLock != null)
+            InkWell(
+              onTap: onToggleLock,
+              child: Icon(
+                locked == true ? Icons.lock : Icons.lock_open,
+                color: locked == true ? Colors.pink : Colors.white38,
+                size: 22,
+              ),
+            )
+          else
+            const SizedBox(width: 22),
+        ],
+      ),
+    );
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFE8E8E8),
       appBar: const HomeAppBar(
         title: Text('Настройка', style: TextStyle(fontSize: 22)),
       ),
       body: Stack(
         children: [
-          // ИСПРАВЛЕНО: фото БЕЗ затемнения — цветопередача как в результате
+          // ФОН (фото) — скрывается и блокируется через слой
           Positioned.fill(
             child: GestureDetector(
-              onScaleStart: _onPhotoScaleStart,
-              onScaleUpdate: _onPhotoScaleUpdate,
-              child: Transform.translate(
-                offset: _imageOffset,
-                child: Transform.scale(
-                  scale: _imageScale,
-                  child: Image.file(
-                    widget.imageFile,
-                    fit: BoxFit.contain,
-                  ),
-                ),
-              ),
+              onScaleStart: _lockBg ? null : _onPhotoScaleStart,
+              onScaleUpdate: _lockBg ? null : _onPhotoScaleUpdate,
+              child: _showBgLayer
+                  ? Transform.translate(
+                      offset: _imageOffset,
+                      child: Transform.scale(
+                        scale: _imageScale,
+                        child: Image.file(
+                          widget.imageFile,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
             ),
           ),
 
@@ -288,11 +374,40 @@ class _EditScreenState extends State<EditScreen> {
             ),
           ),
 
+          // ПАНЕЛЬ СЛОЁВ (справа)
+          Positioned(
+            top: 120,
+            right: 8,
+              child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _layerRow('Ноготь', Icons.brush, _showNailLayer, _lockNail,
+                      () => setState(() => _showNailLayer = !_showNailLayer),
+                      () => setState(() => _lockNail = !_lockNail)),
+                  _layerRow('Кутикула', Icons.water_drop, _showCuticleLayer, null,
+                      () => setState(() => _showCuticleLayer = !_showCuticleLayer),
+                      null),
+                  _layerRow('Фон', Icons.image, _showBgLayer, _lockBg,
+                      () => setState(() => _showBgLayer = !_showBgLayer),
+                      () => setState(() => _lockBg = !_lockBg)),
+                ],
+              ),
+            ),
+          ),
+
+          // НОГОТЬ (рамка) — блокируется через слой
           Positioned(
             left: _frameCenter.dx - _frameWidth / 2,
             top: _frameCenter.dy - _frameHeight / 2,
             child: GestureDetector(
               onPanUpdate: (details) {
+                if (_lockNail) return;
                 setState(() {
                   _frameCenter += details.delta;
                 });
@@ -336,34 +451,57 @@ class _EditScreenState extends State<EditScreen> {
                           ),
                         ),
                         const SizedBox(width: 8),
+                        // Кнопка 3D
                         GestureDetector(
-                          onTap: () => setState(() => _show3D = !_show3D),
+                          onTap: () =>
+                              setState(() => _mode = _mode == 1 ? 0 : 1),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
-                            width: 64,
+                            width: 52,
                             height: 50,
                             decoration: BoxDecoration(
-                              color: _show3D ? Colors.pink : Colors.white10,
+                              color: _mode == 1 ? Colors.pink : Colors.white10,
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: _show3D ? Colors.pink : Colors.white38,
+                                color: _mode == 1 ? Colors.pink : Colors.white38,
                                 width: 2,
                               ),
-                              boxShadow: _show3D
-                                  ? [
-                                      BoxShadow(
-                                        color: Colors.pink.withOpacity(0.5),
-                                        blurRadius: 8,
-                                      ),
-                                    ]
-                                  : null,
                             ),
                             child: const Center(
                               child: Text(
                                 '3D',
                                 style: TextStyle(
                                   color: Colors.white,
-                                  fontSize: 18,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Кнопка КУТИКУЛА
+                        GestureDetector(
+                          onTap: () =>
+                              setState(() => _mode = _mode == 2 ? 0 : 2),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            width: 86,
+                            height: 50,
+                            decoration: BoxDecoration(
+                              color: _mode == 2 ? Colors.pink : Colors.white10,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: _mode == 2 ? Colors.pink : Colors.white38,
+                                width: 2,
+                              ),
+                            ),
+                            child: const Center(
+                              child: Text(
+                                'Кутикула',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -394,9 +532,10 @@ class _EditScreenState extends State<EditScreen> {
                                     width: 16,
                                     height: 22,
                                     decoration: BoxDecoration(
-                                      border: Border.all(color: Colors.white, width: 2),
-                                      borderRadius:
-                                          NailShapeHelper.getBorderRadius(shape, 16, 22),
+                                      border:
+                                          Border.all(color: Colors.white, width: 2),
+                                      borderRadius: NailShapeHelper.getBorderRadius(
+                                          shape, 16, 22),
                                     ),
                                   ),
                                   const SizedBox(height: 4),
@@ -405,8 +544,9 @@ class _EditScreenState extends State<EditScreen> {
                                     style: TextStyle(
                                       color: Colors.white,
                                       fontSize: 8,
-                                      fontWeight:
-                                          isSelected ? FontWeight.bold : FontWeight.normal,
+                                      fontWeight: isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
                                     ),
                                     textAlign: TextAlign.center,
                                     maxLines: 2,
@@ -421,182 +561,66 @@ class _EditScreenState extends State<EditScreen> {
                     ),
                     const SizedBox(height: 8),
 
-                    if (_show3D) ...[
+                    // === РЕЖИМ 3D ===
+                    if (_mode == 1) ...[
                       _groupTitle('3D-эффект', Icons.view_in_ar),
+                      _sliderRow(Icons.blur_on, 'Объём', _edgeDarken, 0.0, 1.0,
+                          (v) => setState(() => _edgeDarken = v)),
+                      _sliderRow(Icons.wb_sunny, 'Блик', _highlightIntensity, 0.0,
+                          1.0, (v) => setState(() => _highlightIntensity = v)),
+                      _sliderRow(Icons.dark_mode, 'Тень', _shadowIntensity, 0.0,
+                          1.0, (v) => setState(() => _shadowIntensity = v)),
+                    ],
+
+                    // === РЕЖИМ КУТИКУЛА (ЛУНКА) ===
+                    if (_mode == 2) ...[
+                      _groupTitle('Лунка вокруг ногтя', Icons.water_drop),
+                      _sliderRow(Icons.straighten, 'Ширина', _cuticleWidth, 0.0,
+                          2.0, (v) => setState(() => _cuticleWidth = v)),
+                      _sliderRow(Icons.swap_vert, 'Длина', _cuticleLength, 0.0,
+                          1.0, (v) => setState(() => _cuticleLength = v)),
+                      _sliderRow(Icons.contrast, 'Темнее', _cuticleDepth, 0.0, 1.0,
+                          (v) => setState(() => _cuticleDepth = v)),
+                      const SizedBox(height: 4),
+                      // Тон кожи: 4 кружка-образца
                       Row(
-                        children: [
-                          const Icon(Icons.blur_on, color: Colors.white, size: 18),
-                          const SizedBox(width: 6),
-                          const SizedBox(
-                            width: 70,
-                            child: Text('Объём',
-                                style: TextStyle(color: Colors.white, fontSize: 11)),
-                          ),
-                          Expanded(
-                            child: Slider(
-                              value: _edgeDarken,
-                              min: 0.0,
-                              max: 1.0,
-                              activeColor: Colors.pink,
-                              inactiveColor: Colors.white24,
-                              onChanged: (value) => setState(() => _edgeDarken = value),
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(CuticleTones.values.length, (i) {
+                          final selected = _cuticleTone == i;
+                          return GestureDetector(
+                            onTap: () => setState(() => _cuticleTone = i),
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              margin: const EdgeInsets.symmetric(horizontal: 5),
+                              decoration: BoxDecoration(
+                                color: CuticleTones.values[i],
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: selected ? Colors.white : Colors.white24,
+                                  width: selected ? 3 : 1,
+                                ),
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          const Icon(Icons.wb_sunny, color: Colors.white, size: 18),
-                          const SizedBox(width: 6),
-                          const SizedBox(
-                            width: 70,
-                            child: Text('Блик',
-                                style: TextStyle(color: Colors.white, fontSize: 11)),
-                          ),
-                          Expanded(
-                            child: Slider(
-                              value: _highlightIntensity,
-                              min: 0.0,
-                              max: 1.0,
-                              activeColor: Colors.pink,
-                              inactiveColor: Colors.white24,
-                              onChanged: (value) =>
-                                  setState(() => _highlightIntensity = value),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          const Icon(Icons.dark_mode, color: Colors.white, size: 18),
-                          const SizedBox(width: 6),
-                          const SizedBox(
-                            width: 70,
-                            child: Text('Тень',
-                                style: TextStyle(color: Colors.white, fontSize: 11)),
-                          ),
-                          Expanded(
-                            child: Slider(
-                              value: _shadowIntensity,
-                              min: 0.0,
-                              max: 1.0,
-                              activeColor: Colors.pink,
-                              inactiveColor: Colors.white24,
-                              onChanged: (value) =>
-                                  setState(() => _shadowIntensity = value),
-                            ),
-                          ),
-                        ],
+                          );
+                        }),
                       ),
                     ],
 
-                    if (!_show3D) ...[
-                      Row(
-                        children: [
-                          const Icon(Icons.layers, color: Colors.white, size: 18),
-                          const SizedBox(width: 6),
-                          SizedBox(
-                            width: 70,
-                            child: Text(
-                              'Слои: ${_density.toInt()}',
-                              style: const TextStyle(color: Colors.white, fontSize: 11),
-                            ),
-                          ),
-                          Expanded(
-                            child: Slider(
-                              value: _density,
-                              min: 1,
-                              max: 3,
-                              divisions: 2,
-                              activeColor: Colors.pink,
-                              inactiveColor: Colors.white24,
-                              onChanged: (value) => setState(() => _density = value),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          const Icon(Icons.brightness_6, color: Colors.white, size: 18),
-                          const SizedBox(width: 6),
-                          const SizedBox(
-                            width: 70,
-                            child: Text(
-                              'Яркость',
-                              style: TextStyle(color: Colors.white, fontSize: 11),
-                            ),
-                          ),
-                          Expanded(
-                            child: Slider(
-                              value: _brightness,
-                              min: 0.7,
-                              max: 1.3,
-                              activeColor: Colors.pink,
-                              inactiveColor: Colors.white24,
-                              onChanged: (value) => setState(() => _brightness = value),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          const Icon(Icons.swap_horiz, color: Colors.white, size: 18),
-                          const SizedBox(width: 6),
-                          const Text('Ширина',
-                              style: TextStyle(color: Colors.white, fontSize: 11)),
-                          Expanded(
-                            child: Slider(
-                              value: _frameWidth,
-                              min: 40,
-                              max: 300,
-                              activeColor: Colors.pink,
-                              inactiveColor: Colors.white24,
-                              onChanged: (value) => setState(() => _frameWidth = value),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          const Icon(Icons.swap_vert, color: Colors.white, size: 18),
-                          const SizedBox(width: 6),
-                          const Text('Высота',
-                              style: TextStyle(color: Colors.white, fontSize: 11)),
-                          Expanded(
-                            child: Slider(
-                              value: _frameHeight,
-                              min: 40,
-                              max: 400,
-                              activeColor: Colors.pink,
-                              inactiveColor: Colors.white24,
-                              onChanged: (value) => setState(() => _frameHeight = value),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          const Icon(Icons.rotate_right, color: Colors.white, size: 18),
-                          const SizedBox(width: 6),
-                          SizedBox(
-                            width: 70,
-                            child: Text(
-                              'Поворот: ${_rotation.toInt()}°',
-                              style: const TextStyle(color: Colors.white, fontSize: 11),
-                            ),
-                          ),
-                          Expanded(
-                            child: Slider(
-                              value: _rotation,
-                              min: -180,
-                              max: 180,
-                              activeColor: Colors.pink,
-                              inactiveColor: Colors.white24,
-                              onChanged: (value) => setState(() => _rotation = value),
-                            ),
-                          ),
-                        ],
-                      ),
+                    // === БАЗОВЫЙ РЕЖИМ ===
+                    if (_mode == 0) ...[
+                      _sliderRow(Icons.layers, 'Слои: ${_density.toInt()}',
+                          _density, 1, 3, (v) => setState(() => _density = v),
+                          divisions: 2),
+                      _sliderRow(Icons.brightness_6, 'Яркость', _brightness, 0.7,
+                          1.3, (v) => setState(() => _brightness = v)),
+                      _sliderRow(Icons.swap_horiz, 'Ширина', _frameWidth, 40, 300,
+                          (v) => setState(() => _frameWidth = v)),
+                      _sliderRow(Icons.swap_vert, 'Высота', _frameHeight, 40, 400,
+                          (v) => setState(() => _frameHeight = v)),
+                      _sliderRow(Icons.rotate_right,
+                          'Поворот: ${_rotation.toInt()}°', _rotation, -180, 180,
+                          (v) => setState(() => _rotation = v)),
                     ],
 
                     const SizedBox(height: 8),

@@ -1,5 +1,5 @@
 name: yournails
-description: "Приложение для примерки дизайна ногтей"
+description: "Твои Ноготочки — цифровая студия дизайна ногтей"
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -17,7 +17,7 @@ dependencies:
   camera: ^0.11.0+2
   image_picker: ^1.1.2
 
-  # Обработка изображений и GIF-экспорт
+  # Обработка изображений
   image: ^4.5.3
 
   # State management
@@ -36,19 +36,46 @@ dependencies:
   # Генерация уникальных ID
   uuid: ^4.3.3
 
+  # Сохранение в галерею
   gal: ^2.3.0
 
+  # Экспорт видео
   flutter_quick_video_encoder: ^1.7.2
 
+  # SVG-логотип
   flutter_svg: ^2.0.10+1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+
   flutter_lints: ^4.0.0
+
+  # Генерация иконки приложения
+  flutter_launcher_icons: ^0.13.1
+
+  # Нативный splash screen
+  flutter_native_splash: ^2.4.0
 
 flutter:
   uses-material-design: true
 
   assets:
     - assets/logo.svg
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon/icon.png"
+  adaptive_icon_background: "#FDEEF3"
+  adaptive_icon_foreground: "assets/icon/icon.png"
+
+flutter_native_splash:
+  color: "#FDEEF3"
+
+  android: true
+  ios: false
+  web: false
+
+  android_12:
+    color: "#FDEEF3"

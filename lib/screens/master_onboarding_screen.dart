@@ -132,7 +132,7 @@ class _MasterOnboardingScreenState extends State<MasterOnboardingScreen> {
                   alignment: Alignment.topRight,
                   child: TextButton.icon(
                     onPressed: _skip,
-                    icon: const Icon(Icons.arrow_forward, size: 20),
+                    icon: const Icon(Icons.arrow_forward, size: 26),
                     label: const Text('Я клиент — пропустить'),
                     style: TextButton.styleFrom(
                       foregroundColor: Colors.grey[600],

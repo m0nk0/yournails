@@ -7,7 +7,16 @@ import '../constants/master_icons.dart';
 import '../models/master.dart';
 
 enum TransitionType { sparkles, circle, flash, wipe, zoom, slide, fade }
-enum VideoTemplate { clean, instagram, tiktok, glam }
+
+enum VideoTemplate {
+  // === ТРЕНДЫ ===
+  splitScreen,
+  // === КЛАССИКА ===
+  clean,
+  instagram,
+  tiktok,
+  glam,
+}
 
 class TemplateConfig {
   final String name;
@@ -20,6 +29,7 @@ class TemplateConfig {
   final Color labelBg;
   final TextStyle labelStyle;
   final bool hasSparkles;
+  final bool isSplitScreen;
 
   const TemplateConfig({
     required this.name,
@@ -32,6 +42,7 @@ class TemplateConfig {
     required this.labelBg,
     required this.labelStyle,
     this.hasSparkles = false,
+    this.isSplitScreen = false,
   });
 
   double get aspectRatio => width / height;
@@ -40,42 +51,87 @@ class TemplateConfig {
 class VideoTemplates {
   static TemplateConfig get(VideoTemplate t) {
     switch (t) {
+      // === ТРЕНДЫ ===
+      case VideoTemplate.splitScreen:
+        return const TemplateConfig(
+          name: 'Слайдер',
+          icon: '🎚',
+          width: 1080,
+          height: 1920,
+          bgColor: Colors.black,
+          labelBg: Color(0xFFE91E63),
+          labelStyle: TextStyle(
+            color: Colors.white,
+            fontSize: 42,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 3,
+          ),
+          isSplitScreen: true,
+        );
+
+      // === КЛАССИКА ===
       case VideoTemplate.clean:
         return const TemplateConfig(
-          name: 'Чистый', icon: '📷',
-          width: 480, height: 640,
+          name: 'Чистый',
+          icon: '📷',
+          width: 480,
+          height: 640,
           bgColor: Color(0xFF1a1a1a),
           labelBg: Color(0xCCe91e63),
-          labelStyle: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
+          labelStyle: TextStyle(
+            color: Colors.white,
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+          ),
         );
       case VideoTemplate.instagram:
         return const TemplateConfig(
-          name: 'Instagram', icon: '📸',
-          width: 640, height: 640,
+          name: 'Instagram',
+          icon: '📸',
+          width: 640,
+          height: 640,
           bgColor: Colors.white,
-          borderWidth: 24, borderColor: Colors.white,
+          borderWidth: 24,
+          borderColor: Colors.white,
           labelBg: Colors.white,
-          labelStyle: TextStyle(color: Color(0xFF262626), fontSize: 26,
-              fontWeight: FontWeight.w600, letterSpacing: 2),
+          labelStyle: TextStyle(
+            color: Color(0xFF262626),
+            fontSize: 26,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 2,
+          ),
         );
       case VideoTemplate.tiktok:
         return const TemplateConfig(
-          name: 'TikTok', icon: '🎵',
-          width: 480, height: 854,
+          name: 'TikTok',
+          icon: '🎵',
+          width: 480,
+          height: 854,
           bgColor: Colors.black,
           labelBg: Colors.black54,
-          labelStyle: TextStyle(color: Colors.white, fontSize: 36,
-              fontWeight: FontWeight.w900, letterSpacing: 4),
+          labelStyle: TextStyle(
+            color: Colors.white,
+            fontSize: 36,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 4,
+          ),
         );
       case VideoTemplate.glam:
         return const TemplateConfig(
-          name: 'Гламур', icon: '💎',
-          width: 480, height: 640,
+          name: 'Гламур',
+          icon: '💎',
+          width: 480,
+          height: 640,
           bgColor: Color(0xFF1a1a1a),
-          borderWidth: 8, borderColor: Color(0xFFE91E63),
+          borderWidth: 8,
+          borderColor: Color(0xFFE91E63),
           labelBg: Color(0xFFE91E63),
-          labelStyle: TextStyle(color: Colors.white, fontSize: 28,
-              fontWeight: FontWeight.bold, fontStyle: FontStyle.italic),
+          labelStyle: TextStyle(
+            color: Colors.white,
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            fontStyle: FontStyle.italic,
+          ),
           hasSparkles: true,
         );
     }
@@ -84,7 +140,9 @@ class VideoTemplates {
 
 class VideoRenderer {
   static void paintFrame(
-    Canvas canvas, Size size, double v, {
+    Canvas canvas,
+    Size size,
+    double v, {
     required List<ui.Image> images,
     required List<String> labels,
     required TransitionType transition,
@@ -126,6 +184,14 @@ class VideoRenderer {
     final outputPath =
         '${tempDir.path}/yournails_${DateTime.now().millisecondsSinceEpoch}.mp4';
 
+    // Слайдер: проход на каждую ПАРУ фото
+    //   2 фото → 1 проход (первое vs последнее)
+    //   3 фото → 2 прохода (0→1, затем 1→2)
+    // Классика: сегмент на каждое фото
+    final int segments =
+        tpl.isSplitScreen ? images.length - 1 : images.length;
+    final double segDur = tpl.isSplitScreen ? 2.5 : segmentDurationSec;
+
     try {
       await FlutterQuickVideoEncoder.setup(
         width: width,
@@ -139,13 +205,13 @@ class VideoRenderer {
         filepath: outputPath,
       );
 
-      final int framesPerSegment = (fps * segmentDurationSec).round();
-      final int totalFrames = framesPerSegment * images.length;
+      final int framesPerSegment = (fps * segDur).round();
+      final int totalFrames = framesPerSegment * segments;
       final math.Random rand = math.Random(7);
       final List<Offset> seeds =
           List.generate(26, (_) => Offset(rand.nextDouble(), rand.nextDouble()));
 
-      for (int seg = 0; seg < images.length; seg++) {
+      for (int seg = 0; seg < segments; seg++) {
         for (int f = 0; f < framesPerSegment; f++) {
           final v = seg + f / framesPerSegment;
 
@@ -186,7 +252,9 @@ class VideoRenderer {
   }
 
   static void _paintFrame(
-    Canvas canvas, Size size, double v, {
+    Canvas canvas,
+    Size size,
+    double v, {
     required List<ui.Image> images,
     required List<String> labels,
     required TransitionType transition,
@@ -195,6 +263,18 @@ class VideoRenderer {
     Master? master,
     ui.Image? masterLogoImage,
   }) {
+    // === SPLIT-SCREEN SLIDER ===
+    if (tpl.isSplitScreen) {
+      _paintSplitScreen(canvas, size, v,
+          images: images,
+          labels: labels,
+          tpl: tpl,
+          master: master,
+          masterLogoImage: masterLogoImage);
+      return;
+    }
+
+    // === ОБЫЧНЫЕ ШАБЛОНЫ ===
     final n = images.length;
     final idx = v.floor() % n;
     final next = (idx + 1) % n;
@@ -288,6 +368,138 @@ class VideoRenderer {
     if (tpl.hasSparkles) _drawCornerSparkles(canvas, size, v, k);
   }
 
+  // === SPLIT-SCREEN SLIDER ===
+  // Для каждой пары соседних фото — отдельный проход.
+  // 2 фото → 1 проход (0 vs 1).
+  // 3 фото → 2 прохода: (0 vs 1), затем (1 vs 2).
+  // Одна надпись по центру в каждом проходе, переключается
+  // при проходе разделителя через середину.
+  static void _paintSplitScreen(
+    Canvas canvas,
+    Size size,
+    double v, {
+    required List<ui.Image> images,
+    required List<String> labels,
+    required TemplateConfig tpl,
+    Master? master,
+    ui.Image? masterLogoImage,
+  }) {
+    final n = images.length;
+    final maxSeg = n - 2;
+    final seg = v.floor().clamp(0, maxSeg);
+    final t = (v - v.floor()).clamp(0.0, 1.0);
+    final k = size.width / tpl.width;
+
+    // Текущая пара фото
+    final beforeImg = images[seg];
+    final afterImg = images[seg + 1];
+    final beforeLabel = labels[seg];
+    final afterLabel = labels[seg + 1];
+
+    // Фон
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height),
+        Paint()..color = tpl.bgColor);
+
+    // Разделитель движется слева направо (ease-in-out)
+    final sliderProgress = _easeInOut(t);
+    final splitX = sliderProgress * size.width;
+
+    // Левая часть — ПОСЛЕ (открывается)
+    canvas.save();
+    canvas.clipRect(Rect.fromLTWH(0, 0, splitX, size.height));
+    _drawContain(canvas, afterImg,
+        Rect.fromLTWH(0, 0, size.width, size.height), 1.0);
+    canvas.restore();
+
+    // Правая часть — ДО (уходит)
+    canvas.save();
+    canvas.clipRect(Rect.fromLTWH(splitX, 0, size.width - splitX, size.height));
+    _drawContain(canvas, beforeImg,
+        Rect.fromLTWH(0, 0, size.width, size.height), 1.0);
+    canvas.restore();
+
+    // === РАЗДЕЛИТЕЛЬ (розовая неоновая линия) ===
+    const pink = Color(0xFFE91E63);
+    final lineWidth = 4 * k;
+    final glowPaint = Paint()
+      ..color = pink.withOpacity(0.4)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
+    canvas.drawRect(
+        Rect.fromLTWH(splitX - lineWidth / 2, 0, lineWidth, size.height),
+        glowPaint);
+    canvas.drawRect(
+        Rect.fromLTWH(splitX - lineWidth / 2, 0, lineWidth, size.height),
+        Paint()..color = pink);
+
+    // === ПОЛЗУНОК (круг на середине линии) ===
+    final circleY = size.height / 2;
+    final circleR = 32 * k;
+    canvas.drawCircle(Offset(splitX, circleY), circleR + 4 * k,
+        Paint()..color = Colors.white.withOpacity(0.9));
+    canvas.drawCircle(Offset(splitX, circleY), circleR, Paint()..color = pink);
+
+    // Стрелки внутри ползунка
+    final arrowSize = 12 * k;
+    final arrowPaint = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 3 * k
+      ..style = PaintingStyle.stroke;
+    // Левая стрелка
+    canvas.drawLine(
+      Offset(splitX - arrowSize, circleY - arrowSize / 2),
+      Offset(splitX - arrowSize / 2, circleY),
+      arrowPaint,
+    );
+    canvas.drawLine(
+      Offset(splitX - arrowSize / 2, circleY),
+      Offset(splitX - arrowSize, circleY + arrowSize / 2),
+      arrowPaint,
+    );
+    // Правая стрелка
+    canvas.drawLine(
+      Offset(splitX + arrowSize, circleY - arrowSize / 2),
+      Offset(splitX + arrowSize / 2, circleY),
+      arrowPaint,
+    );
+    canvas.drawLine(
+      Offset(splitX + arrowSize / 2, circleY),
+      Offset(splitX + arrowSize, circleY + arrowSize / 2),
+      arrowPaint,
+    );
+
+    // === ОДНА НАДПИСЬ ПО ЦЕНТРУ ВВЕРХУ ===
+    final bool afterDominant = splitX > size.width / 2;
+    final caption = afterDominant ? afterLabel : beforeLabel;
+
+    final capTp = TextPainter(
+      text: TextSpan(text: caption, style: tpl.labelStyle),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final padX = 16 * k;
+    final padY = 10 * k;
+    final boxW = capTp.width + padX * 2;
+    final boxH = tpl.labelStyle.fontSize! + padY * 2;
+    final boxX = (size.width - boxW) / 2;
+    final boxY = 60 * k;
+
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+          Rect.fromLTWH(boxX, boxY, boxW, boxH), Radius.circular(12 * k)),
+      Paint()..color = tpl.labelBg,
+    );
+    capTp.paint(canvas, Offset(boxX + padX, boxY + padY));
+
+    // === БЛОК МАСТЕРА ===
+    if (master != null) {
+      _drawMasterBadge(canvas, size, k, 0, master, masterLogoImage);
+    }
+  }
+
+  static double _easeInOut(double t) {
+    return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+  }
+
   /// Бейдж мастера: розовая рамка + розовые буквы на полупрозрачном белом
   static void _drawMasterBadge(
     Canvas canvas,
@@ -325,7 +537,7 @@ class VideoRenderer {
 
     // Полупрозрачный белый фон
     canvas.drawRRect(rrect, Paint()..color = Colors.white.withOpacity(0.85));
-       // Розовая рамка (обводка)
+    // Розовая рамка (обводка)
     canvas.drawRRect(
       rrect,
       Paint()

@@ -42,9 +42,8 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     });
   }
 
-    // ============ СВЯЗЬ С КЛИЕНТОМ ============
+  // ============ СВЯЗЬ С КЛИЕНТОМ ============
 
-  /// Диалог выбора способа связи
   Future<void> _showContactDialog() async {
     final phone = _client.phone ?? '';
     final digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
@@ -85,19 +84,16 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
                 );
               },
             ),
-                        _contactTile(
+            _contactTile(
               icon: Icons.chat_bubble,
               color: const Color(0xFF7B3FF2),
               label: 'Max',
               enabled: true,
               onTap: () async {
                 Navigator.pop(context);
-                // Копируем текст в буфер
                 await Clipboard.setData(ClipboardData(
                     text: '${_client.name}, здравствуйте! '
                         'Пора обновить ноготочки 💅'));
-                // Открываем главную страницу Max
-                // Если приложение установлено — Android сам перехватит ссылку
                 await launchUrl(Uri.parse('https://max.ru'),
                     mode: LaunchMode.externalApplication);
                 if (mounted) {
@@ -105,18 +101,16 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
                 }
               },
             ),
-                        _contactTile(
+            _contactTile(
               icon: Icons.public,
               color: const Color(0xFF0077FF),
               label: 'ВКонтакте',
               enabled: true,
               onTap: () async {
                 Navigator.pop(context);
-                // Копируем текст в буфер
                 await Clipboard.setData(ClipboardData(
                     text: '${_client.name}, здравствуйте! '
                         'Пора обновить ноготочки 💅'));
-                // Веб-ссылка на сообщения — открывается сразу (как в 1-й версии)
                 await launchUrl(Uri.parse('https://vk.com/im'),
                     mode: LaunchMode.externalApplication);
                 if (mounted) {
@@ -146,7 +140,8 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
                 final subject = Uri.encodeComponent('Напоминание');
                 final body = Uri.encodeComponent(
                     '${_client.name}, здравствуйте! Пора обновить ноготочки 💅');
-                await launchUrl(Uri.parse('mailto:?subject=$subject&body=$body'));
+                await launchUrl(
+                    Uri.parse('mailto:?subject=$subject&body=$body'));
               },
             ),
             const Divider(height: 24),
@@ -227,6 +222,7 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
       _loadSessions();
     }
   }
+
   // ============ РЕДАКТИРОВАНИЕ ПРОФИЛЯ КЛИЕНТА ============
 
   Future<void> _editClientProfile() async {
@@ -283,6 +279,7 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
       if (mounted) _snack('Данные клиента обновлены', Colors.green);
     }
   }
+
   // ============ НОВЫЙ ВИЗИТ (фото "до") ============
 
   Future<void> _addSessionWithBeforePhoto() async {
@@ -611,10 +608,184 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     }
   }
 
-  void _openAnimation(NailSession session) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => AnimationScreen(session: session)),
+  // ============ ВИДЕО: ВЫБОР ВАРИАНТА ============
+
+  Future<void> _openAnimation(NailSession session) async {
+    final available = <String>[];
+    if (session.hasBefore) available.add('before');
+    if (session.hasTryOn) available.add('tryon');
+    if (session.hasAfter) available.add('after');
+
+    // Менее 2 фото — вообще не должно быть (кнопка неактивна)
+    if (available.length < 2) return;
+
+    // Ровно 2 фото — автовыбор, без диалога
+    if (available.length == 2) {
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                AnimationScreen(session: session, photoTypes: available),
+          ),
+        );
+      }
+      return;
+    }
+
+    // 3 фото — мастер выбирает вариант из 4 карточек
+    final selected = await _showVideoVariantDialog(session);
+    if (selected == null) return;
+    if (mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              AnimationScreen(session: session, photoTypes: selected),
+        ),
+      );
+    }
+  }
+
+  /// Диалог с 4 вариантами клипа (с превью фото)
+  Future<List<String>?> _showVideoVariantDialog(NailSession session) async {
+    final options = <Map<String, dynamic>>[];
+
+    if (session.hasBefore && session.hasTryOn) {
+      options.add({
+        'title': 'До → Примерка',
+        'subtitle': 'Процесс создания',
+        'types': ['before', 'tryon'],
+        'paths': [session.beforePhotoPath!, session.tryOnPhotoPath!],
+      });
+    }
+    if (session.hasTryOn && session.hasAfter) {
+      options.add({
+        'title': 'Примерка → После',
+        'subtitle': '✨ Точь-в-точь как нарисовали!',
+        'types': ['tryon', 'after'],
+        'paths': [session.tryOnPhotoPath!, session.afterPhotoPath!],
+        'highlight': true,
+      });
+    }
+    if (session.hasBefore && session.hasAfter) {
+      options.add({
+        'title': 'До → После',
+        'subtitle': 'Классическое сравнение',
+        'types': ['before', 'after'],
+        'paths': [session.beforePhotoPath!, session.afterPhotoPath!],
+      });
+    }
+    if (session.hasBefore && session.hasTryOn && session.hasAfter) {
+      options.add({
+        'title': 'Все 3: До → Примерка → После',
+        'subtitle': 'Полная история визита',
+        'types': ['before', 'tryon', 'after'],
+        'paths': [
+          session.beforePhotoPath!,
+          session.tryOnPhotoPath!,
+          session.afterPhotoPath!,
+        ],
+      });
+    }
+
+    // Если только одна опция — сразу возвращаем её
+    if (options.length == 1) {
+      return options[0]['types'] as List<String>;
+    }
+
+    return showDialog<List<String>>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Выберите вариант видео',
+            style: TextStyle(fontSize: 20)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: options
+                .map((opt) => _variantCard(
+                      title: opt['title'] as String,
+                      subtitle: opt['subtitle'] as String,
+                      paths: opt['paths'] as List<String>,
+                      highlight: (opt['highlight'] ?? false) as bool,
+                      onTap: () => Navigator.pop(
+                          context, opt['types'] as List<String>),
+                    ))
+                .toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: const Text('Отмена', style: TextStyle(fontSize: 16)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _variantCard({
+    required String title,
+    required String subtitle,
+    required List<String> paths,
+    required bool highlight,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: highlight ? Colors.pink[50] : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: highlight ? Colors.pink : Colors.grey[300]!,
+          width: highlight ? 2 : 1,
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              // Мини-превью фото
+              ...paths.asMap().entries.map((e) {
+                final i = e.key;
+                final p = e.value;
+                return Padding(
+                  padding: EdgeInsets.only(right: i < paths.length - 1 ? 6 : 0),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.file(File(p),
+                        width: 50, height: 50, fit: BoxFit.cover),
+                  ),
+                );
+              }),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 2),
+                    Text(subtitle,
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: highlight ? Colors.pink : Colors.grey[600],
+                            fontWeight: highlight
+                                ? FontWeight.w600
+                                : FontWeight.normal)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right,
+                  color: highlight ? Colors.pink : Colors.grey),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -662,7 +833,7 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
                           style: const TextStyle(
                               fontSize: 30, fontWeight: FontWeight.bold)),
                     ),
-                                        IconButton(
+                    IconButton(
                       icon: const Icon(Icons.edit, size: 28),
                       tooltip: 'Изменить имя и телефон',
                       onPressed: _editClientProfile,
@@ -790,7 +961,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // === СТРОКА 1: дата + цена + действия ===
             Row(
               children: [
                 Expanded(
@@ -852,7 +1022,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
               ],
             ),
 
-            // === СТРОКА 2: услуга + заметка ===
             const SizedBox(height: 10),
             Row(
               children: [
@@ -891,7 +1060,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
 
             const SizedBox(height: 16),
 
-            // === ФОТО: ДО / ПРИМЕРКА / ПОСЛЕ ===
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

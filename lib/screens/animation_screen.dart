@@ -12,7 +12,8 @@ import '../widgets/video_renderer.dart';
 
 class AnimationScreen extends StatefulWidget {
   final NailSession session;
-  const AnimationScreen({super.key, required this.session});
+  final List<String>? photoTypes; // null — все фото визита
+  const AnimationScreen({super.key, required this.session, this.photoTypes});
 
   @override
   State<AnimationScreen> createState() => _AnimationScreenState();
@@ -26,7 +27,8 @@ class _AnimationScreenState extends State<AnimationScreen>
   AnimationController? _controller;
 
   TransitionType _transition = TransitionType.sparkles;
-  VideoTemplate _template = VideoTemplate.clean;
+  VideoTemplate _template = VideoTemplate.splitScreen;
+  String _selectedGroup = '🔥 Тренды';
 
   List<Master> _masters = [];
   Master? _selectedMaster;
@@ -44,16 +46,20 @@ class _AnimationScreenState extends State<AnimationScreen>
   Future<void> _loadPhotos() async {
     final files = <File>[];
     final labels = <String>[];
+    final types = widget.photoTypes;
 
-    if (widget.session.hasBefore) {
+    if (widget.session.hasBefore &&
+        (types == null || types.contains('before'))) {
       files.add(File(widget.session.beforePhotoPath!));
       labels.add('ДО');
     }
-    if (widget.session.hasTryOn) {
+    if (widget.session.hasTryOn &&
+        (types == null || types.contains('tryon'))) {
       files.add(File(widget.session.tryOnPhotoPath!));
       labels.add('ПРИМЕРКА');
     }
-    if (widget.session.hasAfter) {
+    if (widget.session.hasAfter &&
+        (types == null || types.contains('after'))) {
       files.add(File(widget.session.afterPhotoPath!));
       labels.add('ПОСЛЕ');
     }
@@ -81,13 +87,30 @@ class _AnimationScreenState extends State<AnimationScreen>
     });
 
     if (_images.length >= 2) {
-      _controller = AnimationController(
-        vsync: this,
-        lowerBound: 0,
-        upperBound: _images.length.toDouble(),
-        duration: Duration(milliseconds: 1500 * _images.length),
-      )..repeat();
+      _syncController();
     }
+  }
+
+    /// Синхронизирует контроллер превью с текущим шаблоном.
+  /// Слайдер: upper = images.length - 1 (проход на каждую ПАРУ фото).
+  /// Классика: upper = images.length (сегмент на каждое фото).
+  void _syncController() {
+    if (_images.length < 2) return;
+    final double upper = VideoTemplates.get(_template).isSplitScreen
+        ? (_images.length - 1).toDouble()
+        : _images.length.toDouble();
+    final int durationMs = (2500 * upper).round();
+
+    // Пересоздаём контроллер (upperBound только для чтения)
+    _controller?.dispose();
+    _controller = AnimationController(
+      vsync: this,
+      lowerBound: 0,
+      upperBound: upper,
+      duration: Duration(milliseconds: durationMs),
+    )..repeat();
+
+    if (mounted) setState(() {});
   }
 
   /// Загрузка логотипа мастера как ui.Image
@@ -132,7 +155,7 @@ class _AnimationScreenState extends State<AnimationScreen>
         transition: _transition,
         master: _selectedMaster,
         masterLogoImage: _masterLogoImage,
-        segmentDurationSec: 1.5,
+        segmentDurationSec: 2.5,
         fps: 30,
         onProgress: (progress) {
           if (mounted) {
@@ -186,8 +209,39 @@ class _AnimationScreenState extends State<AnimationScreen>
     }
   }
 
-    /// Свой чип: тёмный полупрозрачный, выбранный — розовый
-  Widget _buildChip({
+  /// Чип группы
+  Widget _buildGroupChip({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.pink : Colors.white.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? Colors.pink : Colors.white.withOpacity(0.25),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.white70,
+            fontSize: 15,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Чип шаблона
+  Widget _buildTemplateChip({
     required String label,
     required bool isSelected,
     required VoidCallback onTap,
@@ -217,9 +271,23 @@ class _AnimationScreenState extends State<AnimationScreen>
     );
   }
 
+  List<VideoTemplate> _getTemplatesForGroup(String group) {
+    if (group == '🔥 Тренды') {
+      return [VideoTemplate.splitScreen];
+    } else {
+      return [
+        VideoTemplate.clean,
+        VideoTemplate.instagram,
+        VideoTemplate.tiktok,
+        VideoTemplate.glam,
+      ];
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final tpl = VideoTemplates.get(_template);
+    final groupTemplates = _getTemplatesForGroup(_selectedGroup);
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -271,7 +339,8 @@ class _AnimationScreenState extends State<AnimationScreen>
                           padding: const EdgeInsets.only(bottom: 8),
                           child: Row(
                             children: [
-                              const Icon(Icons.person, color: Colors.pink, size: 20),
+                              const Icon(Icons.person,
+                                  color: Colors.pink, size: 20),
                               const SizedBox(width: 8),
                               const Text('Мастер: ',
                                   style: TextStyle(
@@ -304,48 +373,90 @@ class _AnimationScreenState extends State<AnimationScreen>
                             ],
                           ),
                         ),
-                                            SizedBox(
+
+                      // ===== ГРУППЫ ШАБЛОНОВ =====
+                      SizedBox(
                         height: 44,
-                        child: ListView(
-                          scrollDirection: Axis.horizontal,
-                          children: TransitionType.values.map((tr) {
-                            final names = {
-                              TransitionType.sparkles: '✨ Блёстки',
-                              TransitionType.circle: '⭕ Круг',
-                              TransitionType.flash: '⚡ Вспышка',
-                              TransitionType.wipe: '🎭 Шторка',
-                              TransitionType.zoom: '🎯 Зум',
-                              TransitionType.slide: '📱 Слайд',
-                              TransitionType.fade: '🌫 Фейд',
-                            };
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                              child: _buildChip(
-                                label: names[tr]!,
-                                isSelected: _transition == tr,
-                                onTap: () => setState(() => _transition = tr),
+                        child: Row(
+                          children: ['🔥 Тренды', '📼 Классика'].map((group) {
+                            return Expanded(
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 3),
+                                child: _buildGroupChip(
+                                  label: group,
+                                  isSelected: _selectedGroup == group,
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedGroup = group;
+                                      final templates =
+                                          _getTemplatesForGroup(group);
+                                      _template = templates.first;
+                                    });
+                                    _syncController();
+                                  },
+                                ),
                               ),
                             );
                           }).toList(),
                         ),
                       ),
                       const SizedBox(height: 8),
-                                           Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: VideoTemplate.values.map((t) {
-                          final cfg = VideoTemplates.get(t);
-                          return Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 3),
-                              child: _buildChip(
+
+                      // ===== ШАБЛОНЫ В ВЫБРАННОЙ ГРУППЕ =====
+                      SizedBox(
+                        height: 44,
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          children: groupTemplates.map((t) {
+                            final cfg = VideoTemplates.get(t);
+                            return Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 4),
+                              child: _buildTemplateChip(
                                 label: '${cfg.icon} ${cfg.name}',
                                 isSelected: _template == t,
-                                onTap: () => setState(() => _template = t),
+                                onTap: () {
+                                  setState(() => _template = t);
+                                  _syncController();
+                                },
                               ),
-                            ),
-                          );
-                        }).toList(),
+                            );
+                          }).toList(),
+                        ),
                       ),
+
+                      // ===== ПЕРЕХОДЫ (только для классики) =====
+                      if (_selectedGroup == '📼 Классика') ...[
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          height: 44,
+                          child: ListView(
+                            scrollDirection: Axis.horizontal,
+                            children: TransitionType.values.map((tr) {
+                              final names = {
+                                TransitionType.sparkles: '✨ Блёстки',
+                                TransitionType.circle: '⭕ Круг',
+                                TransitionType.flash: '⚡ Вспышка',
+                                TransitionType.wipe: '🎭 Шторка',
+                                TransitionType.zoom: '🎯 Зум',
+                                TransitionType.slide: '📱 Слайд',
+                                TransitionType.fade: '🌫 Фейд',
+                              };
+                              return Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 4),
+                                child: _buildTemplateChip(
+                                  label: names[tr]!,
+                                  isSelected: _transition == tr,
+                                  onTap: () => setState(() => _transition = tr),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ],
+
                       const SizedBox(height: 12),
                       if (_isExporting) ...[
                         LinearProgressIndicator(

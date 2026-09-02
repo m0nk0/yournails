@@ -181,10 +181,18 @@ class _CrmScreenState extends State<CrmScreen>
         children: [
           Container(
             color: Theme.of(context).colorScheme.primary,
-            child: TabBar(
+              child: TabBar(
               controller: _tab,
-              labelStyle:
-                  const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.white70,
+              labelStyle: const TextStyle(
+                  fontSize: 19, fontWeight: FontWeight.w700),
+              unselectedLabelStyle: const TextStyle(
+                  fontSize: 19, fontWeight: FontWeight.w600),
+              indicator: const UnderlineTabIndicator(
+                borderSide: BorderSide(width: 7.0, color: Colors.white),
+              ),
+              indicatorSize: TabBarIndicatorSize.label,
               tabs: [
                 Tab(text: 'Клиенты (${_clients.length})'),
                 Tab(text: 'Напоминания${dueCount > 0 ? ' ($dueCount)' : ''}'),

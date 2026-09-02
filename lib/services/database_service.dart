@@ -12,7 +12,7 @@ import '../models/master.dart';
 /// Сервис работы с локальной базой данных.
 /// Использует Hive для хранения данных и файловую систему для фото.
 class DatabaseService {
-    static const String _clientsBox = 'clients';
+  static const String _clientsBox = 'clients';
   static const String _sessionsBox = 'sessions';
   static const String _myDesignsBox = 'my_designs';
   static const String _mastersBox = 'masters';
@@ -37,14 +37,33 @@ class DatabaseService {
   // ============ НАСТРОЙКИ ============
 
   /// Был ли онбординг пропущен (режим клиента)
-  static bool get isOnboardingSkipped => _settings.get('skip_onboarding', defaultValue: false) as bool;
+  static bool get isOnboardingSkipped =>
+      _settings.get('skip_onboarding', defaultValue: false) as bool;
 
   /// Установить флаг пропуска онбординга
   static Future<void> setOnboardingSkipped(bool value) async {
     await _settings.put('skip_onboarding', value);
   }
 
-  // ============ МАСТЕРА ============ // ← НОВЫЙ РАЗДЕЛ
+  // ============ НАСТРОЙКИ CRM ============
+
+  /// Интервал напоминаний в днях (по умолчанию 28)
+  static int get reminderDays =>
+      _settings.get('reminder_days', defaultValue: 28) as int;
+
+  static Future<void> setReminderDays(int days) async {
+    await _settings.put('reminder_days', days);
+  }
+
+  /// Дефолтная цена визита в ₽ (по умолчанию 2000)
+  static double get defaultPrice =>
+      (_settings.get('default_price', defaultValue: 2000.0) as num).toDouble();
+
+  static Future<void> setDefaultPrice(double price) async {
+    await _settings.put('default_price', price);
+  }
+
+  // ============ МАСТЕРА ============
 
   /// Добавить мастера
   static Future<Master> addMaster({
@@ -144,6 +163,11 @@ class DatabaseService {
     return Client.fromMap(Map<String, dynamic>.from(map));
   }
 
+  /// Обновить клиента (заметки и т.д.)
+  static Future<void> updateClient(Client client) async {
+    await _clients.put(client.id, client.toMap());
+  }
+
   /// Удалить клиента
   static Future<void> deleteClient(String id) async {
     await _clients.delete(id);
@@ -171,13 +195,15 @@ class DatabaseService {
     return session;
   }
 
-  /// Создать сессию сразу с фото
+  /// Создать сессию сразу с фото (+ CRM-данные: цена и услуга)
   static Future<NailSession> addSessionWithPhotos({
     required String clientId,
     String? beforePhotoPath,
     String? tryOnPhotoPath,
     String? afterPhotoPath,
     String? note,
+    double? price,
+    String? serviceName,
   }) async {
     final session = NailSession(
       id: const Uuid().v4(),
@@ -186,6 +212,8 @@ class DatabaseService {
       tryOnPhotoPath: tryOnPhotoPath,
       afterPhotoPath: afterPhotoPath,
       note: note,
+      price: price ?? defaultPrice,
+      serviceName: serviceName ?? 'Маникюр',
       createdAt: DateTime.now(),
     );
     await _sessions.put(session.id, session.toMap());
@@ -208,7 +236,20 @@ class DatabaseService {
     return list;
   }
 
-  /// Обновить сессию (добавить фото)
+  /// Получить ВСЕ сессии (для статистики и напоминаний)
+  static List<NailSession> getAllSessions() {
+    final list = <NailSession>[];
+    for (final key in _sessions.keys) {
+      final map = _sessions.get(key);
+      if (map != null) {
+        list.add(NailSession.fromMap(Map<String, dynamic>.from(map)));
+      }
+    }
+    list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return list;
+  }
+
+  /// Обновить сессию (добавить фото, цену, заметку)
   static Future<void> updateSession(NailSession session) async {
     await _sessions.put(session.id, session.toMap());
   }

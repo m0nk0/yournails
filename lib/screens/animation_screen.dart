@@ -271,9 +271,9 @@ class _AnimationScreenState extends State<AnimationScreen>
     );
   }
 
-  List<VideoTemplate> _getTemplatesForGroup(String group) {
+    List<VideoTemplate> _getTemplatesForGroup(String group) {
     if (group == '🔥 Тренды') {
-      return [VideoTemplate.splitScreen];
+      return [VideoTemplate.splitScreen, VideoTemplate.reveal];
     } else {
       return [
         VideoTemplate.clean,

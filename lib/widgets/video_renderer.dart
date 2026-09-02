@@ -11,6 +11,7 @@ enum TransitionType { sparkles, circle, flash, wipe, zoom, slide, fade }
 enum VideoTemplate {
   // === ТРЕНДЫ ===
   splitScreen,
+  reveal,
   // === КЛАССИКА ===
   clean,
   instagram,
@@ -30,6 +31,7 @@ class TemplateConfig {
   final TextStyle labelStyle;
   final bool hasSparkles;
   final bool isSplitScreen;
+  final bool isReveal;
 
   const TemplateConfig({
     required this.name,
@@ -43,6 +45,7 @@ class TemplateConfig {
     required this.labelStyle,
     this.hasSparkles = false,
     this.isSplitScreen = false,
+    this.isReveal = false,
   });
 
   double get aspectRatio => width / height;
@@ -67,6 +70,26 @@ class VideoTemplates {
             letterSpacing: 3,
           ),
           isSplitScreen: true,
+        );
+
+      case VideoTemplate.reveal:
+        return const TemplateConfig(
+          name: 'Reveal',
+          icon: '⚡',
+          width: 1080,
+          height: 1920,
+          bgColor: Colors.black,
+          labelBg: Color(0xFFE91E63),
+          labelStyle: TextStyle(
+            color: Colors.white,
+            fontSize: 48,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 4,
+            shadows: [
+              Shadow(color: Colors.black, blurRadius: 12),
+            ],
+          ),
+          isReveal: true,
         );
 
       // === КЛАССИКА ===
@@ -184,10 +207,8 @@ class VideoRenderer {
     final outputPath =
         '${tempDir.path}/yournails_${DateTime.now().millisecondsSinceEpoch}.mp4';
 
-    // Слайдер: проход на каждую ПАРУ фото
-    //   2 фото → 1 проход (первое vs последнее)
-    //   3 фото → 2 прохода (0→1, затем 1→2)
-    // Классика: сегмент на каждое фото
+    // Слайдер: проход на каждую ПАРУ фото (2 фото → 1, 3 фото → 2)
+    // Классика и Reveal: сегмент на каждое фото
     final int segments =
         tpl.isSplitScreen ? images.length - 1 : images.length;
     final double segDur = tpl.isSplitScreen ? 2.5 : segmentDurationSec;
@@ -266,6 +287,17 @@ class VideoRenderer {
     // === SPLIT-SCREEN SLIDER ===
     if (tpl.isSplitScreen) {
       _paintSplitScreen(canvas, size, v,
+          images: images,
+          labels: labels,
+          tpl: tpl,
+          master: master,
+          masterLogoImage: masterLogoImage);
+      return;
+    }
+
+    // === REVEAL (ВИРУСНЫЙ) ===
+    if (tpl.isReveal) {
+      _paintReveal(canvas, size, v,
           images: images,
           labels: labels,
           tpl: tpl,
@@ -404,14 +436,14 @@ class VideoRenderer {
     final sliderProgress = _easeInOut(t);
     final splitX = sliderProgress * size.width;
 
-    // Левая часть — ПОСЛЕ (открывается)
+    // Левая часть — открывается
     canvas.save();
     canvas.clipRect(Rect.fromLTWH(0, 0, splitX, size.height));
     _drawContain(canvas, afterImg,
         Rect.fromLTWH(0, 0, size.width, size.height), 1.0);
     canvas.restore();
 
-    // Правая часть — ДО (уходит)
+    // Правая часть — уходит
     canvas.save();
     canvas.clipRect(Rect.fromLTWH(splitX, 0, size.width - splitX, size.height));
     _drawContain(canvas, beforeImg,
@@ -489,6 +521,91 @@ class VideoRenderer {
       Paint()..color = tpl.labelBg,
     );
     capTp.paint(canvas, Offset(boxX + padX, boxY + padY));
+
+    // === БЛОК МАСТЕРА ===
+    if (master != null) {
+      _drawMasterBadge(canvas, size, k, 0, master, masterLogoImage);
+    }
+  }
+
+  // === REVEAL (ВИРУСНЫЙ) ===
+  // Каждое фото появляется из белой вспышки с драматичным эффектом.
+  // Сегмент на каждое фото: 2 фото → 2 вспышки, 3 фото → 3 вспышки.
+  static void _paintReveal(
+    Canvas canvas,
+    Size size,
+    double v, {
+    required List<ui.Image> images,
+    required List<String> labels,
+    required TemplateConfig tpl,
+    Master? master,
+    ui.Image? masterLogoImage,
+  }) {
+    final n = images.length;
+    final idx = v.floor() % n;
+    final t = (v - v.floor()).clamp(0.0, 1.0);
+    final k = size.width / tpl.width;
+
+    // Чёрный фон
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height),
+        Paint()..color = Colors.black);
+
+    final inner = Rect.fromLTWH(0, 0, size.width, size.height);
+
+    // === ВСПЫШКА (0.0 — 0.3): нарастает до пика и падает ===
+    double flashIntensity = 0.0;
+    if (t < 0.3) {
+      final flashPhase = t / 0.3;
+      flashIntensity = flashPhase < 0.5 ? flashPhase * 2 : 2 - flashPhase * 2;
+    }
+
+    // === ФОТО (0.15 — 0.9): появление, удержание, затемнение ===
+    double photoOpacity = 0.0;
+    if (t >= 0.15 && t < 0.3) {
+      photoOpacity = (t - 0.15) / 0.15;
+    } else if (t >= 0.3 && t < 0.75) {
+      photoOpacity = 1.0;
+    } else if (t >= 0.75 && t < 0.9) {
+      photoOpacity = (0.9 - t) / 0.15;
+    }
+
+    // Лёгкий Ken Burns пока фото видно
+    final double photoScale = 1.0 + 0.08 * t;
+
+    if (photoOpacity > 0) {
+      _drawContain(canvas, images[idx], inner, photoOpacity,
+          scale: photoScale);
+    }
+
+    // Вспышка поверх фото
+    if (flashIntensity > 0) {
+      canvas.drawRect(
+          inner, Paint()..color = Colors.white.withOpacity(flashIntensity));
+    }
+
+    // === НАДПИСЬ ПО ЦЕНТРУ (появляется вместе с фото) ===
+    final captionOpacity = ((photoOpacity - 0.3) / 0.7).clamp(0.0, 1.0);
+    if (captionOpacity > 0) {
+      final tp = TextPainter(
+        text: TextSpan(text: labels[idx], style: tpl.labelStyle),
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      final ls = tpl.labelStyle.fontSize! * k;
+      final padX = 20 * k;
+      final padY = 14 * k;
+      final boxW = tp.width + padX * 2;
+      final boxH = ls + padY * 2;
+      final lx = (size.width - boxW) / 2;
+      final ly = 80 * k;
+
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+            Rect.fromLTWH(lx, ly, boxW, boxH), Radius.circular(14 * k)),
+        Paint()..color = tpl.labelBg.withOpacity(captionOpacity),
+      );
+      tp.paint(canvas, Offset(lx + padX, ly + padY));
+    }
 
     // === БЛОК МАСТЕРА ===
     if (master != null) {

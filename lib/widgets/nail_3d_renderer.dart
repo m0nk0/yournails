@@ -25,24 +25,22 @@ class Nail3DRenderer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: width,
       height: height,
-      decoration: showNail && design.shadowIntensity > 0
-          ? BoxDecoration(
-              borderRadius:
-                  NailShapeHelper.getBorderRadius(design.shape, width, height),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(design.shadowIntensity * 0.4),
-                  blurRadius: 6 * design.shadowIntensity,
-                  offset: Offset(0, 3 * design.shadowIntensity),
-                ),
-              ],
-            )
-          : null,
       child: Stack(
         children: [
+          // Тень по контуру ногтя (размытый силуэт формы, не прямоугольник!)
+          if (showNail && design.shadowIntensity > 0)
+            Positioned.fill(
+              child: CustomPaint(
+                painter: NailShadowPainter(
+                  shape: design.shape,
+                  intensity: design.shadowIntensity,
+                ),
+              ),
+            ),
+
           Positioned.fill(
             child: CustomPaint(
               painter: RealisticNailPainter(
@@ -71,6 +69,31 @@ class Nail3DRenderer extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Тень по контуру ногтя: размытый силуэт формы со смещением вниз
+class NailShadowPainter extends CustomPainter {
+  final NailShape shape;
+  final double intensity;
+  const NailShadowPainter({required this.shape, required this.intensity});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = buildNailPath(size.width, size.height, shape);
+    canvas.save();
+    canvas.translate(0, 3 * intensity);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Colors.black.withOpacity(intensity * 0.4)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 6 * intensity),
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant NailShadowPainter oldDelegate) =>
+      oldDelegate.shape != shape || oldDelegate.intensity != intensity;
 }
 
 /// Обрезает PNG по форме ногтя

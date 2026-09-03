@@ -9,6 +9,7 @@ import '../widgets/home_app_bar.dart';
 import '../widgets/nail_3d_renderer.dart';
 import '../painters/realistic_nail_painter.dart';
 import '../painters/socket_groove.dart';
+import '../painters/nail_path.dart';
 import 'result_screen.dart';
 import 'design_selection_screen.dart';
 
@@ -46,7 +47,7 @@ class _EditScreenState extends State<EditScreen> {
   double _cuticleLength = 0.8;
   int _cuticleTone = 1;
 
-  // Режим панели: 0 = базовый, 1 = 3D, 2 = кутикула
+  // Режим панели: 0 = базовый, 1 = 3D, 2 = кутикула, 3 = формы
   int _mode = 0;
 
   // Рамка
@@ -60,6 +61,8 @@ class _EditScreenState extends State<EditScreen> {
   bool _lockBg = false;
 
   bool _initialized = false;
+
+  bool get _hasDesign => _selectedDesign != null && _selectedDesign!.hasColor;
 
   @override
   void didChangeDependencies() {
@@ -106,7 +109,8 @@ class _EditScreenState extends State<EditScreen> {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => DesignSelectionScreen(currentDesign: _buildCurrentDesign()),
+        builder: (_) =>
+            DesignSelectionScreen(currentDesign: _buildCurrentDesign()),
       ),
     );
 
@@ -129,7 +133,7 @@ class _EditScreenState extends State<EditScreen> {
   }
 
   void _saveAndNext() {
-    if (_selectedDesign == null || !_selectedDesign!.hasColor) {
+    if (!_hasDesign) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Выберите дизайн'),
@@ -182,36 +186,46 @@ class _EditScreenState extends State<EditScreen> {
   }
 
   Widget _buildNailPreview() {
-    final borderRadius =
-        NailShapeHelper.getBorderRadius(_shape, _frameWidth, _frameHeight);
-    final frameBorder = _showFrame ? Border.all(color: Colors.pink, width: 3) : null;
-
-    if (_selectedDesign == null || !_selectedDesign!.hasColor) {
-      return Container(
-        width: _frameWidth,
-        height: _frameHeight,
-        decoration: BoxDecoration(
-          border: frameBorder,
-          borderRadius: borderRadius,
-          color: Colors.pink.withOpacity(0.1),
-        ),
-        child: const Center(
-          child: Icon(Icons.touch_app, color: Colors.pink, size: 30),
-        ),
-      );
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        border: frameBorder,
-        borderRadius: borderRadius,
-      ),
-      child: Nail3DRenderer(
-        design: _buildCurrentDesign(),
-        width: _frameWidth,
-        height: _frameHeight,
-        showNail: _showNailLayer,
-        showCuticle: _showCuticleLayer,
+    return SizedBox(
+      width: _frameWidth,
+      height: _frameHeight,
+      child: Stack(
+        children: [
+          // Ноготь или плейсхолдер — оба по контуру формы
+          if (_hasDesign)
+            Positioned.fill(
+              child: Nail3DRenderer(
+                design: _buildCurrentDesign(),
+                width: _frameWidth,
+                height: _frameHeight,
+                showNail: _showNailLayer,
+                showCuticle: _showCuticleLayer,
+              ),
+            )
+          else
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _NailFillPainter(
+                  shape: _shape,
+                  fillColor: Colors.pink.withOpacity(0.1),
+                ),
+                child: const Center(
+                  child: Icon(Icons.touch_app, color: Colors.pink, size: 30),
+                ),
+              ),
+            ),
+          // Рамка по контуру ногтя (а не прямоугольник!)
+          if (_showFrame)
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _NailOutlinePainter(
+                  shape: _shape,
+                  color: Colors.pink,
+                  strokeWidth: 3,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -265,7 +279,37 @@ class _EditScreenState extends State<EditScreen> {
     );
   }
 
-    /// Строка панели слоёв (крупная, как в фотошопе)
+  /// Кнопка-переключатель режима (3D / Формы / Кутикула)
+  Widget _modeButton(String label, int mode, {double width = 70}) {
+    return GestureDetector(
+      onTap: () => setState(() => _mode = _mode == mode ? 0 : mode),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: width,
+        height: 50,
+        decoration: BoxDecoration(
+          color: _mode == mode ? Colors.pink : Colors.white10,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _mode == mode ? Colors.pink : Colors.white38,
+            width: 2,
+          ),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Строка панели слоёв (крупная, как в фотошопе)
   Widget _layerRow(String name, IconData icon, bool visible, bool? locked,
       VoidCallback onToggleVisible, VoidCallback? onToggleLock) {
     return Padding(
@@ -301,6 +345,7 @@ class _EditScreenState extends State<EditScreen> {
       ),
     );
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -349,36 +394,11 @@ class _EditScreenState extends State<EditScreen> {
             ),
           ),
 
-          // Кнопка скрытия рамки
-          Positioned(
-            top: 60,
-            right: 16,
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () => setState(() => _showFrame = !_showFrame),
-                borderRadius: BorderRadius.circular(24),
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Icon(
-                    _showFrame ? Icons.visibility : Icons.visibility_off,
-                    color: Colors.white,
-                    size: 22,
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          // ПАНЕЛЬ СЛОЁВ (справа)
+          // ПАНЕЛЬ СЛОЁВ (справа): Ноготь / Рамка / Кутикула / Фон
           Positioned(
             top: 120,
             right: 8,
-              child: Container(
+            child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.black54,
@@ -390,6 +410,8 @@ class _EditScreenState extends State<EditScreen> {
                   _layerRow('Ноготь', Icons.brush, _showNailLayer, _lockNail,
                       () => setState(() => _showNailLayer = !_showNailLayer),
                       () => setState(() => _lockNail = !_lockNail)),
+                  _layerRow('Рамка', Icons.border_outer, _showFrame, null,
+                      () => setState(() => _showFrame = !_showFrame), null),
                   _layerRow('Кутикула', Icons.water_drop, _showCuticleLayer, null,
                       () => setState(() => _showCuticleLayer = !_showCuticleLayer),
                       null),
@@ -430,6 +452,7 @@ class _EditScreenState extends State<EditScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // ===== ВЕРХНЯЯ СТРОКА: Дизайн + 3D + Формы + Кутикула =====
                     Row(
                       children: [
                         Expanded(
@@ -451,115 +474,71 @@ class _EditScreenState extends State<EditScreen> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        // Кнопка 3D
-                        GestureDetector(
-                          onTap: () =>
-                              setState(() => _mode = _mode == 1 ? 0 : 1),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            width: 52,
-                            height: 50,
-                            decoration: BoxDecoration(
-                              color: _mode == 1 ? Colors.pink : Colors.white10,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: _mode == 1 ? Colors.pink : Colors.white38,
-                                width: 2,
-                              ),
-                            ),
-                            child: const Center(
-                              child: Text(
-                                '3D',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
+                        _modeButton('3D', 1, width: 52),
                         const SizedBox(width: 8),
-                        // Кнопка КУТИКУЛА
-                        GestureDetector(
-                          onTap: () =>
-                              setState(() => _mode = _mode == 2 ? 0 : 2),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            width: 86,
-                            height: 50,
-                            decoration: BoxDecoration(
-                              color: _mode == 2 ? Colors.pink : Colors.white10,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: _mode == 2 ? Colors.pink : Colors.white38,
-                                width: 2,
-                              ),
-                            ),
-                            child: const Center(
-                              child: Text(
-                                'Кутикула',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
+                        _modeButton('Формы', 3, width: 70),
+                        const SizedBox(width: 8),
+                        _modeButton('Кутикула', 2, width: 86),
                       ],
                     ),
                     const SizedBox(height: 8),
 
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: NailShape.values.map((shape) {
-                        final isSelected = _shape == shape;
-                        return Expanded(
-                          child: GestureDetector(
-                            onTap: () => setState(() => _shape = shape),
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 2),
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              decoration: BoxDecoration(
-                                color: isSelected ? Colors.pink : Colors.white10,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Column(
-                                children: [
-                                  Container(
-                                    width: 16,
-                                    height: 22,
-                                    decoration: BoxDecoration(
-                                      border:
-                                          Border.all(color: Colors.white, width: 2),
-                                      borderRadius: NailShapeHelper.getBorderRadius(
-                                          shape, 16, 22),
+                    // === РЕЖИМ ФОРМЫ (выбор из 14, выровненные карточки) ===
+                    if (_mode == 3) ...[
+                      _groupTitle('Форма ногтя', Icons.auto_fix_high),
+                      const SizedBox(height: 4),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: NailShape.values.map((shape) {
+                            final isSelected = _shape == shape;
+                            return GestureDetector(
+                              onTap: () => setState(() => _shape = shape),
+                              child: Container(
+                                width: 80,
+                                height: 88,
+                                margin:
+                                    const EdgeInsets.symmetric(horizontal: 4),
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 6, horizontal: 6),
+                                decoration: BoxDecoration(
+                                  color:
+                                      isSelected ? Colors.pink : Colors.white10,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Column(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    CustomPaint(
+                                      size: const Size(30, 40),
+                                      painter: _NailShapePreview(shape: shape),
                                     ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    NailShapeHelper.getName(shape),
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 8,
-                                      fontWeight: isSelected
-                                          ? FontWeight.bold
-                                          : FontWeight.normal,
+                                    SizedBox(
+                                      height: 28,
+                                      child: Text(
+                                        NailShapeHelper.getName(shape),
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 9,
+                                          fontWeight: isSelected
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
-                                    textAlign: TextAlign.center,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 8),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ],
 
                     // === РЕЖИМ 3D ===
                     if (_mode == 1) ...[
@@ -609,11 +588,14 @@ class _EditScreenState extends State<EditScreen> {
 
                     // === БАЗОВЫЙ РЕЖИМ ===
                     if (_mode == 0) ...[
-                      _sliderRow(Icons.layers, 'Слои: ${_density.toInt()}',
-                          _density, 1, 3, (v) => setState(() => _density = v),
-                          divisions: 2),
-                      _sliderRow(Icons.brightness_6, 'Яркость', _brightness, 0.7,
-                          1.3, (v) => setState(() => _brightness = v)),
+                      // Слои и Яркость — только после выбора дизайна
+                      if (_hasDesign) ...[
+                        _sliderRow(Icons.layers, 'Слои: ${_density.toInt()}',
+                            _density, 1, 3, (v) => setState(() => _density = v),
+                            divisions: 2),
+                        _sliderRow(Icons.brightness_6, 'Яркость', _brightness,
+                            0.7, 1.3, (v) => setState(() => _brightness = v)),
+                      ],
                       _sliderRow(Icons.swap_horiz, 'Ширина', _frameWidth, 40, 300,
                           (v) => setState(() => _frameWidth = v)),
                       _sliderRow(Icons.swap_vert, 'Высота', _frameHeight, 40, 400,
@@ -644,4 +626,69 @@ class _EditScreenState extends State<EditScreen> {
       ),
     );
   }
+}
+
+/// Превью-силуэт формы ногтя в меню выбора.
+class _NailShapePreview extends CustomPainter {
+  final NailShape shape;
+  _NailShapePreview({required this.shape});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = buildNailPath(size.width, size.height, shape);
+    final paint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _NailShapePreview oldDelegate) =>
+      oldDelegate.shape != shape;
+}
+
+/// Рамка по контуру ногтя (для острой/сложной формы)
+class _NailOutlinePainter extends CustomPainter {
+  final NailShape shape;
+  final Color color;
+  final double strokeWidth;
+  _NailOutlinePainter(
+      {required this.shape, required this.color, this.strokeWidth = 3});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = buildNailPath(size.width, size.height, shape);
+    canvas.drawPath(
+        path,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = strokeWidth
+          ..strokeJoin = StrokeJoin.round
+          ..strokeCap = StrokeCap.round);
+  }
+
+  @override
+  bool shouldRepaint(covariant _NailOutlinePainter oldDelegate) =>
+      oldDelegate.shape != shape ||
+      oldDelegate.color != color ||
+      oldDelegate.strokeWidth != strokeWidth;
+}
+
+/// Заливка плейсхолдера по контуру ногтя
+class _NailFillPainter extends CustomPainter {
+  final NailShape shape;
+  final Color fillColor;
+  _NailFillPainter({required this.shape, required this.fillColor});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = buildNailPath(size.width, size.height, shape);
+    canvas.drawPath(path, Paint()..color = fillColor);
+  }
+
+  @override
+  bool shouldRepaint(covariant _NailFillPainter oldDelegate) =>
+      oldDelegate.shape != shape || oldDelegate.fillColor != fillColor;
 }

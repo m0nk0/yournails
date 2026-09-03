@@ -271,9 +271,13 @@ class _AnimationScreenState extends State<AnimationScreen>
     );
   }
 
-    List<VideoTemplate> _getTemplatesForGroup(String group) {
+      List<VideoTemplate> _getTemplatesForGroup(String group) {
     if (group == '🔥 Тренды') {
-      return [VideoTemplate.splitScreen, VideoTemplate.reveal];
+      return [
+        VideoTemplate.splitScreen,
+        VideoTemplate.reveal,
+        VideoTemplate.magazine,
+      ];
     } else {
       return [
         VideoTemplate.clean,
@@ -403,26 +407,31 @@ class _AnimationScreenState extends State<AnimationScreen>
                       ),
                       const SizedBox(height: 8),
 
-                      // ===== ШАБЛОНЫ В ВЫБРАННОЙ ГРУППЕ =====
-                      SizedBox(
-                        height: 44,
-                        child: ListView(
-                          scrollDirection: Axis.horizontal,
-                          children: groupTemplates.map((t) {
-                            final cfg = VideoTemplates.get(t);
-                            return Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 4),
-                              child: _buildTemplateChip(
-                                label: '${cfg.icon} ${cfg.name}',
-                                isSelected: _template == t,
-                                onTap: () {
-                                  setState(() => _template = t);
-                                  _syncController();
-                                },
-                              ),
-                            );
-                          }).toList(),
+                                          // ===== ШАБЛОНЫ В ВЫБРАННОЙ ГРУППЕ (в линию, по центру) =====
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minWidth: MediaQuery.of(context).size.width - 48,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: groupTemplates.map((t) {
+                              final cfg = VideoTemplates.get(t);
+                              return Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 4),
+                                child: _buildTemplateChip(
+                                  label: '${cfg.icon} ${cfg.name}',
+                                  isSelected: _template == t,
+                                  onTap: () {
+                                    setState(() => _template = t);
+                                    _syncController();
+                                  },
+                                ),
+                              );
+                            }).toList(),
+                          ),
                         ),
                       ),
 

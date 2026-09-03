@@ -12,6 +12,7 @@ enum VideoTemplate {
   // === ТРЕНДЫ ===
   splitScreen,
   reveal,
+  magazine,
   // === КЛАССИКА ===
   clean,
   instagram,
@@ -32,6 +33,7 @@ class TemplateConfig {
   final bool hasSparkles;
   final bool isSplitScreen;
   final bool isReveal;
+  final bool isMagazine;
 
   const TemplateConfig({
     required this.name,
@@ -46,6 +48,7 @@ class TemplateConfig {
     this.hasSparkles = false,
     this.isSplitScreen = false,
     this.isReveal = false,
+    this.isMagazine = false,
   });
 
   double get aspectRatio => width / height;
@@ -74,7 +77,7 @@ class VideoTemplates {
 
       case VideoTemplate.reveal:
         return const TemplateConfig(
-          name: 'Reveal',
+          name: 'Вспышка',
           icon: '⚡',
           width: 1080,
           height: 1920,
@@ -90,6 +93,23 @@ class VideoTemplates {
             ],
           ),
           isReveal: true,
+        );
+
+      case VideoTemplate.magazine:
+        return const TemplateConfig(
+          name: 'Обложка',
+          icon: '📰',
+          width: 1080,
+          height: 1920,
+          bgColor: Color(0xFFFAF7F2),
+          labelBg: Color(0xFFE91E63),
+          labelStyle: TextStyle(
+            color: Colors.white,
+            fontSize: 48,
+            fontWeight: FontWeight.w700,
+            fontStyle: FontStyle.italic,
+          ),
+          isMagazine: true,
         );
 
       // === КЛАССИКА ===
@@ -208,7 +228,7 @@ class VideoRenderer {
         '${tempDir.path}/yournails_${DateTime.now().millisecondsSinceEpoch}.mp4';
 
     // Слайдер: проход на каждую ПАРУ фото (2 фото → 1, 3 фото → 2)
-    // Классика и Reveal: сегмент на каждое фото
+    // Классика, Вспышка и Обложка: сегмент на каждое фото
     final int segments =
         tpl.isSplitScreen ? images.length - 1 : images.length;
     final double segDur = tpl.isSplitScreen ? 2.5 : segmentDurationSec;
@@ -295,9 +315,20 @@ class VideoRenderer {
       return;
     }
 
-    // === REVEAL (ВИРУСНЫЙ) ===
+    // === REVEAL / ВСПЫШКА (ВИРУСНЫЙ) ===
     if (tpl.isReveal) {
       _paintReveal(canvas, size, v,
+          images: images,
+          labels: labels,
+          tpl: tpl,
+          master: master,
+          masterLogoImage: masterLogoImage);
+      return;
+    }
+
+    // === MAGAZINE (ОБЛОЖКА ЖУРНАЛА) ===
+    if (tpl.isMagazine) {
+      _paintMagazine(canvas, size, v,
           images: images,
           labels: labels,
           tpl: tpl,
@@ -528,7 +559,7 @@ class VideoRenderer {
     }
   }
 
-  // === REVEAL (ВИРУСНЫЙ) ===
+  // === REVEAL / ВСПЫШКА (ВИРУСНЫЙ) ===
   // Каждое фото появляется из белой вспышки с драматичным эффектом.
   // Сегмент на каждое фото: 2 фото → 2 вспышки, 3 фото → 3 вспышки.
   static void _paintReveal(
@@ -613,11 +644,189 @@ class VideoRenderer {
     }
   }
 
+  // === MAGAZINE (ОБЛОЖКА ЖУРНАЛА) ===
+  // Каждое фото — своя обложка глянцевого журнала.
+  // Переход — «перелистывание» через белый.
+  static void _paintMagazine(
+    Canvas canvas,
+    Size size,
+    double v, {
+    required List<ui.Image> images,
+    required List<String> labels,
+    required TemplateConfig tpl,
+    Master? master,
+    ui.Image? masterLogoImage,
+  }) {
+    final n = images.length;
+    final idx = v.floor().clamp(0, n - 1);
+    final t = (v - v.floor()).clamp(0.0, 1.0);
+    final k = size.width / tpl.width;
+    final bool hasNext = idx < n - 1;
+
+    const black = Color(0xFF111111);
+    const paper = Color(0xFFFAF7F2);
+
+    // Белый глянцевый фон
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height),
+        Paint()..color = paper);
+
+    // === ШАПКА ЖУРНАЛА ===
+    final masthead = TextPainter(
+      text: TextSpan(
+        text: 'НОГОТОЧКИ',
+        style: TextStyle(
+          fontFamily: 'serif',
+          fontSize: 110 * k,
+          fontWeight: FontWeight.w900,
+          color: black,
+          letterSpacing: 14 * k,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    masthead.paint(canvas, Offset((size.width - masthead.width) / 2, 70 * k));
+
+    // === СТРОКА ВЫПУСКА ===
+    final now = DateTime.now();
+    const months = [
+      'ЯНВАРЬ', 'ФЕВРАЛЬ', 'МАРТ', 'АПРЕЛЬ', 'МАЙ', 'ИЮНЬ',
+      'ИЮЛЬ', 'АВГУСТ', 'СЕНТЯБРЬ', 'ОКТЯБРЬ', 'НОЯБРЬ', 'ДЕКАБРЬ'
+    ];
+    final issue = TextPainter(
+      text: TextSpan(
+        text: '№ ${now.month} • ${months[now.month - 1]} ${now.year} • ТРЕНД 2026',
+        style: TextStyle(
+          fontFamily: 'serif',
+          fontSize: 26 * k,
+          color: const Color(0xFF777777),
+          letterSpacing: 4 * k,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    issue.paint(canvas, Offset((size.width - issue.width) / 2, 215 * k));
+
+    // === ФОТО (обложка, cover-кроп с лёгким зумом) ===
+    final photoArea = Rect.fromLTRB(
+        50 * k, 300 * k, size.width - 50 * k, size.height - 330 * k);
+    final kenBurns = 1.0 + 0.05 * t;
+    _drawCover(canvas, images[idx], photoArea, 1.0, scale: kenBurns);
+
+    // Тонкая рамка вокруг фото
+    canvas.drawRect(photoArea, Paint()
+      ..color = black
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3 * k);
+
+    // === ЗАГОЛОВОК (ДО / ПРИМЕРКА / ПОСЛЕ) поверх низа фото ===
+    final headline = TextPainter(
+      text: TextSpan(
+        text: labels[idx],
+        style: TextStyle(
+          fontFamily: 'serif',
+          fontSize: 120 * k,
+          fontWeight: FontWeight.w700,
+          fontStyle: FontStyle.italic,
+          color: Colors.white,
+          shadows: [
+            Shadow(color: Colors.black.withOpacity(0.6), blurRadius: 16 * k),
+          ],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    headline.paint(canvas,
+        Offset((size.width - headline.width) / 2,
+            photoArea.bottom - headline.height - 40 * k));
+
+    // === НИЖНИЙ БЛОК: мастер + слоган ===
+    final masterLine = master != null
+        ? 'МАСТЕР • ${master.name.toUpperCase()}'
+        : 'ДО/ПОСЛЕ • ЭКСКЛЮЗИВ';
+    final bottom = TextPainter(
+      text: TextSpan(
+        text: masterLine,
+        style: TextStyle(
+          fontFamily: 'serif',
+          fontSize: 40 * k,
+          fontWeight: FontWeight.w700,
+          color: black,
+          letterSpacing: 3 * k,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    bottom.paint(
+        canvas, Offset((size.width - bottom.width) / 2, size.height - 260 * k));
+
+    final sub = TextPainter(
+      text: TextSpan(
+        text: 'Эксклюзивное преображение: как нарисовали — так и получилось',
+        style: TextStyle(
+          fontFamily: 'serif',
+          fontSize: 26 * k,
+          fontStyle: FontStyle.italic,
+          color: const Color(0xFF777777),
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    sub.paint(
+        canvas, Offset((size.width - sub.width) / 2, size.height - 200 * k));
+
+    // === ШТРИХ-КОД (справа внизу) ===
+    final bcX = size.width - 220 * k;
+    final bcY = size.height - 140 * k;
+    final rand = math.Random(42);
+    double x = bcX;
+    for (int i = 0; i < 20; i++) {
+      final w = (2 + rand.nextInt(6)) * k;
+      canvas.drawRect(Rect.fromLTWH(x, bcY, w, 80 * k), Paint()..color = black);
+      x += w + 4 * k;
+    }
+
+    // === ПЕРЕХОД «ПЕРЕЛИСТЫВАНИЕ» через белый ===
+    double whiteOverlay = 0.0;
+    if (t < 0.12) {
+      whiteOverlay = 1 - t / 0.12; // страница проявляется из белого
+    } else if (hasNext && t > 0.88) {
+      whiteOverlay = (t - 0.88) / 0.12; // уходит в белый
+    }
+    if (whiteOverlay > 0) {
+      canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height),
+          Paint()..color = paper.withOpacity(whiteOverlay));
+    }
+  }
+
+  /// Cover-кроп: фото заполняет область целиком (края обрезаются)
+  static void _drawCover(Canvas canvas, ui.Image image, Rect area,
+      double opacity,
+      {double scale = 1.0}) {
+    final s =
+        math.max(area.width / image.width, area.height / image.height) * scale;
+    final w = image.width * s;
+    final h = image.height * s;
+    final sx = (w - area.width) / 2 / s;
+    final sy = (h - area.height) / 2 / s;
+    final sw = area.width / s;
+    final sh = area.height / s;
+    canvas.save();
+    canvas.clipRect(area);
+    canvas.drawImageRect(
+      image,
+      Rect.fromLTWH(sx, sy, sw, sh),
+      area,
+      Paint()..color = Color.fromRGBO(255, 255, 255, opacity.clamp(0, 1)),
+    );
+    canvas.restore();
+  }
+
   static double _easeInOut(double t) {
     return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
   }
 
-  /// Бейдж мастера: розовая рамка + розовые буквы на полупрозрачном белом
+  /// Бейдж мастера: розовая рамка + розовые буквы на полупрозрачном белом.
+  /// Размер пропорционален ширине кадра — одинаково смотрится на любом шаблоне.
   static void _drawMasterBadge(
     Canvas canvas,
     Size size,
@@ -628,29 +837,34 @@ class VideoRenderer {
   ) {
     const pink = Color(0xFFE91E63);
 
+    // Пропорция: на 480px s == 1 (как раньше), на 1080px s == 2.25 —
+    // бейдж крупнее ровно настолько, насколько больше кадр
+    final double s = size.width / 480;
+
     final nameTp = TextPainter(
       text: TextSpan(
         text: master.name,
         style: TextStyle(
           color: pink,
-          fontSize: 16 * k,
+          fontSize: 18 * s,
           fontWeight: FontWeight.w700,
         ),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
 
-    final avatarR = 14 * k;
-    final gap = 6 * k;
-    final padX = 10 * k;
-    final padY = 6 * k;
+    final avatarR = 16 * s;
+    final gap = 8 * s;
+    final padX = 12 * s;
+    final padY = 8 * s;
     final blockW = padX * 2 + avatarR * 2 + gap + nameTp.width;
     final blockH = padY * 2 + math.max(avatarR * 2, nameTp.height);
     final bx = (size.width - blockW) / 2;
-    final by = size.height - b - blockH - 16 * k;
+    // Поднят вверх: сидит на фото как фирменный водяной знак
+    final by = size.height - b - blockH - 28 * s;
 
     final rrect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(bx, by, blockW, blockH), Radius.circular(14 * k));
+        Rect.fromLTWH(bx, by, blockW, blockH), Radius.circular(16 * s));
 
     // Полупрозрачный белый фон
     canvas.drawRRect(rrect, Paint()..color = Colors.white.withOpacity(0.85));
@@ -660,7 +874,7 @@ class VideoRenderer {
       Paint()
         ..color = pink
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2 * k,
+        ..strokeWidth = 2.5 * s,
     );
 
     final avatarCenter = Offset(bx + padX + avatarR, by + blockH / 2);
@@ -673,9 +887,9 @@ class VideoRenderer {
       final srcW = masterLogoImage.width.toDouble();
       final srcH = masterLogoImage.height.toDouble();
       final dst = Rect.fromCircle(center: avatarCenter, radius: avatarR);
-      final s = math.max(dst.width / srcW, dst.height / srcH);
-      final sw = dst.width / s;
-      final sh = dst.height / s;
+      final sc = math.max(dst.width / srcW, dst.height / srcH);
+      final sw = dst.width / sc;
+      final sh = dst.height / sc;
       final sx = (srcW - sw) / 2;
       final sy = (srcH - sh) / 2;
       canvas.drawImageRect(
@@ -690,7 +904,7 @@ class VideoRenderer {
           text: String.fromCharCode(icon.codePoint),
           style: TextStyle(
             fontFamily: icon.fontFamily,
-            fontSize: 16 * k,
+            fontSize: 18 * s,
             color: Colors.white,
           ),
         ),

@@ -4,9 +4,9 @@ import 'package:image_picker/image_picker.dart';
 import '../constants/master_icons.dart';
 import '../models/master.dart';
 import '../services/database_service.dart';
+import '../utils/top_message.dart';
 import 'home_screen.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-
 
 /// Экран первого запуска / редактирования мастера
 class MasterOnboardingScreen extends StatefulWidget {
@@ -57,12 +57,7 @@ class _MasterOnboardingScreenState extends State<MasterOnboardingScreen> {
   Future<void> _save() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Введите ваше имя'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      TopMessage.show(context, 'Введите ваше имя');
       return;
     }
 
@@ -141,108 +136,111 @@ class _MasterOnboardingScreenState extends State<MasterOnboardingScreen> {
                   ),
                 ),
 
+              // СКРОЛЛ: при открытой клавиатуре ничего не переполняется
               Expanded(
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (isEditing) ...[
-                        const Text(
-                          'Редактирование мастера',
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.pink,
+                child: SingleChildScrollView(
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (isEditing) ...[
+                          const Text(
+                            'Редактирование мастера',
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.pink,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 32),
-                      ] else ...[
-                                                // Логотип-лотос
-                        SvgPicture.asset(
-                          'assets/logo.svg',
-                          width: 180,
-                          height: 180,
-                        ),
-                        const SizedBox(height: 32),
+                          const SizedBox(height: 32),
+                        ] else ...[
+                          // Логотип-лотос
+                          SvgPicture.asset(
+                            'assets/logo.svg',
+                            width: 180,
+                            height: 180,
+                          ),
+                          const SizedBox(height: 32),
 
-                        const Text(
-                          'Твои Ноготочки',
-                          style: TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.pink,
-                            letterSpacing: 0.5,
+                          const Text(
+                            'Твои Ноготочки',
+                            style: TextStyle(
+                              fontSize: 36,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.pink,
+                              letterSpacing: 0.5,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Цифровая студия nail-арта',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey[600],
-                            fontStyle: FontStyle.italic,
+                          const SizedBox(height: 8),
+                          Text(
+                            'Цифровая студия nail-арта',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey[600],
+                              fontStyle: FontStyle.italic,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 40),
-                      ],
+                          const SizedBox(height: 40),
+                        ],
 
-                      // Поле имени
-                      TextField(
-                        controller: _nameController,
-                        textAlign: TextAlign.center,
-                        decoration: InputDecoration(
-                          hintText: 'Как вас зовут?',
-                          hintStyle: TextStyle(color: Colors.grey[400]),
-                          filled: true,
-                          fillColor: Colors.pink.withOpacity(0.06),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(20),
-                            borderSide: BorderSide.none,
+                        // Поле имени
+                        TextField(
+                          controller: _nameController,
+                          textAlign: TextAlign.center,
+                          decoration: InputDecoration(
+                            hintText: 'Как вас зовут?',
+                            hintStyle: TextStyle(color: Colors.grey[400]),
+                            filled: true,
+                            fillColor: Colors.pink.withOpacity(0.06),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              borderSide: BorderSide.none,
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              borderSide: const BorderSide(color: Colors.pink, width: 2),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(vertical: 18),
                           ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(20),
-                            borderSide: const BorderSide(color: Colors.pink, width: 2),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(vertical: 18),
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
                         ),
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(height: 16),
+                        const SizedBox(height: 16),
 
-                      // Превью выбранного лого + кнопка выбора
-                      GestureDetector(
-                        onTap: _openLogoPicker,
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.pink.withOpacity(0.3)),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _buildSmallPreview(),
-                              const SizedBox(width: 12),
-                              Text(
-                                _customLogoPath != null || _selectedIconName != null
-                                    ? 'Изменить логотип'
-                                    : 'Выбрать логотип',
-                                style: const TextStyle(
-                                  color: Colors.pink,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
+                        // Превью выбранного лого + кнопка выбора
+                        GestureDetector(
+                          onTap: _openLogoPicker,
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.pink.withOpacity(0.3)),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _buildSmallPreview(),
+                                const SizedBox(width: 12),
+                                Text(
+                                  _customLogoPath != null || _selectedIconName != null
+                                      ? 'Изменить логотип'
+                                      : 'Выбрать логотип',
+                                  style: const TextStyle(
+                                    color: Colors.pink,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 4),
-                              const Icon(Icons.edit, size: 16, color: Colors.pink),
-                            ],
+                                const SizedBox(width: 4),
+                                const Icon(Icons.edit, size: 16, color: Colors.pink),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

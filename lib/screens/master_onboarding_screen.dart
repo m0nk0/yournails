@@ -114,15 +114,19 @@ class _MasterOnboardingScreenState extends State<MasterOnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Клавиатура открыта — контент МАКСИМАЛЬНО сжимается,
+    // чтобы поле + логотип-кнопка встали НАД кнопкой «Начать»
+    final bool kbOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(kbOpen ? 16 : 24),
           child: Column(
             children: [
               // Кнопка "Я клиент — пропустить" (только при создании)
-              if (!isEditing)
+              if (!isEditing && !kbOpen)
                 Align(
                   alignment: Alignment.topRight,
                   child: TextButton.icon(
@@ -136,110 +140,124 @@ class _MasterOnboardingScreenState extends State<MasterOnboardingScreen> {
                   ),
                 ),
 
-              // СКРОЛЛ: при открытой клавиатуре ничего не переполняется
+              // СКРОЛЛ + компактный режим при клавиатуре
               Expanded(
-                child: SingleChildScrollView(
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (isEditing) ...[
-                          const Text(
-                            'Редактирование мастера',
-                            style: TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.pink,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 32),
-                        ] else ...[
-                          // Логотип-лотос
-                          SvgPicture.asset(
-                            'assets/logo.svg',
-                            width: 180,
-                            height: 180,
-                          ),
-                          const SizedBox(height: 32),
-
-                          const Text(
-                            'Твои Ноготочки',
-                            style: TextStyle(
-                              fontSize: 36,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.pink,
-                              letterSpacing: 0.5,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Цифровая студия nail-арта',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.grey[600],
-                              fontStyle: FontStyle.italic,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 40),
-                        ],
-
-                        // Поле имени
-                        TextField(
-                          controller: _nameController,
-                          textAlign: TextAlign.center,
-                          decoration: InputDecoration(
-                            hintText: 'Как вас зовут?',
-                            hintStyle: TextStyle(color: Colors.grey[400]),
-                            filled: true,
-                            fillColor: Colors.pink.withOpacity(0.06),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              borderSide: BorderSide.none,
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              borderSide: const BorderSide(color: Colors.pink, width: 2),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(vertical: 18),
-                          ),
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Превью выбранного лого + кнопка выбора
-                        GestureDetector(
-                          onTap: _openLogoPicker,
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.pink.withOpacity(0.3)),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _buildSmallPreview(),
-                                const SizedBox(width: 12),
-                                Text(
-                                  _customLogoPath != null || _selectedIconName != null
-                                      ? 'Изменить логотип'
-                                      : 'Выбрать логотип',
-                                  style: const TextStyle(
-                                    color: Colors.pink,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                child: LayoutBuilder(
+                  builder: (context, constraints) => SingleChildScrollView(
+                    child: ConstrainedBox(
+                      constraints:
+                          BoxConstraints(minHeight: constraints.maxHeight),
+                      child: IntrinsicHeight(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (isEditing) ...[
+                              Text(
+                                'Редактирование мастера',
+                                style: TextStyle(
+                                  fontSize: kbOpen ? 20 : 28,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.pink,
                                 ),
-                                const SizedBox(width: 4),
-                                const Icon(Icons.edit, size: 16, color: Colors.pink),
+                                textAlign: TextAlign.center,
+                              ),
+                              SizedBox(height: kbOpen ? 12 : 32),
+                            ] else ...[
+                              // Логотип-лотос: 180 обычно, 80 при клавиатуре
+                              SvgPicture.asset(
+                                'assets/logo.svg',
+                                width: kbOpen ? 80 : 180,
+                                height: kbOpen ? 80 : 180,
+                              ),
+                              SizedBox(height: kbOpen ? 12 : 32),
+
+                              Text(
+                                'Твои Ноготочки',
+                                style: TextStyle(
+                                  fontSize: kbOpen ? 24 : 36,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.pink,
+                                  letterSpacing: 0.5,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+
+                              // Подзаголовок скрывается при клавиатуре
+                              if (!kbOpen) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Цифровая студия nail-арта',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.grey[600],
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
                               ],
+                              SizedBox(height: kbOpen ? 16 : 40),
+                            ],
+
+                            // Поле имени
+                            TextField(
+                              controller: _nameController,
+                              textAlign: TextAlign.center,
+                              decoration: InputDecoration(
+                                hintText: 'Как вас зовут?',
+                                hintStyle: TextStyle(color: Colors.grey[400]),
+                                filled: true,
+                                fillColor: Colors.pink.withOpacity(0.06),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                  borderSide: BorderSide.none,
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                  borderSide: const BorderSide(color: Colors.pink, width: 2),
+                                ),
+                                contentPadding: EdgeInsets.symmetric(
+                                    vertical: kbOpen ? 12 : 18),
+                              ),
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
                             ),
-                          ),
+                            SizedBox(height: kbOpen ? 10 : 16),
+
+                            // Превью выбранного лого + кнопка выбора
+                            GestureDetector(
+                              onTap: _openLogoPicker,
+                              child: Container(
+                                padding: EdgeInsets.all(kbOpen ? 8 : 12),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.pink.withOpacity(0.3)),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _buildSmallPreview(),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      _customLogoPath != null || _selectedIconName != null
+                                          ? 'Изменить логотип'
+                                          : 'Выбрать логотип',
+                                      style: const TextStyle(
+                                        color: Colors.pink,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    const Icon(Icons.edit, size: 16, color: Colors.pink),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            // Запас до кнопки «Начать»
+                            SizedBox(height: kbOpen ? 12 : 24),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -248,7 +266,7 @@ class _MasterOnboardingScreenState extends State<MasterOnboardingScreen> {
               // Кнопка внизу
               SizedBox(
                 width: double.infinity,
-                height: 56,
+                height: kbOpen ? 48 : 56,
                 child: ElevatedButton(
                   onPressed: _isSaving ? null : _save,
                   style: ElevatedButton.styleFrom(
@@ -367,7 +385,6 @@ class _LogoPickerScreenState extends State<_LogoPickerScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Большое превью
             Center(child: _buildBigPreview()),
             const SizedBox(height: 24),
 

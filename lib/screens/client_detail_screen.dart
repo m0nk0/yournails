@@ -9,6 +9,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/client.dart';
 import '../models/nail_session.dart';
 import '../services/database_service.dart';
+import '../utils/responsive.dart';
+import '../utils/top_message.dart';
 import '../widgets/home_app_bar.dart';
 import 'photo_view_screen.dart';
 import 'animation_screen.dart';
@@ -724,6 +726,8 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     );
   }
 
+  /// Карточка варианта видео: миниатюры СВЕРХУ, текст СНИЗУ на всю ширину —
+  /// ничего не зажимается даже с 3 фото
   Widget _variantCard({
     required String title,
     required String subtitle,
@@ -746,42 +750,42 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(12),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Мини-превью фото
-              ...paths.asMap().entries.map((e) {
-                final i = e.key;
-                final p = e.value;
-                return Padding(
-                  padding: EdgeInsets.only(right: i < paths.length - 1 ? 6 : 0),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.file(File(p),
-                        width: 50, height: 50, fit: BoxFit.cover),
-                  ),
-                );
-              }),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title,
-                        style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 2),
-                    Text(subtitle,
-                        style: TextStyle(
-                            fontSize: 13,
-                            color: highlight ? Colors.pink : Colors.grey[600],
-                            fontWeight: highlight
-                                ? FontWeight.w600
-                                : FontWeight.normal)),
-                  ],
-                ),
+              // Мини-превью фото сверху
+              Row(
+                children: [
+                  ...paths.asMap().entries.map((e) {
+                    final i = e.key;
+                    final p = e.value;
+                    return Padding(
+                      padding: EdgeInsets.only(
+                          right: i < paths.length - 1 ? 6 : 0),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.file(File(p),
+                            width: 56, height: 56, fit: BoxFit.cover),
+                      ),
+                    );
+                  }),
+                  const Spacer(),
+                  Icon(Icons.chevron_right,
+                      color: highlight ? Colors.pink : Colors.grey),
+                ],
               ),
-              Icon(Icons.chevron_right,
-                  color: highlight ? Colors.pink : Colors.grey),
+              const SizedBox(height: 8),
+              // Текст на всю ширину — никогда не зажимается
+              Text(title,
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 2),
+              Text(subtitle,
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: highlight ? Colors.pink : Colors.grey[600],
+                      fontWeight:
+                          highlight ? FontWeight.w600 : FontWeight.normal)),
             ],
           ),
         ),
@@ -789,12 +793,10 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     );
   }
 
+  /// Все сообщения — СВЕРХУ (не закрывают нижние кнопки)
   void _snack(String text, Color bg) {
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(text),
-        backgroundColor: bg,
-      ));
+      TopMessage.show(context, text, color: bg);
     }
   }
 
@@ -803,6 +805,7 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final totalSum = _sessions.fold(0.0, (s, x) => s + (x.price ?? 0));
+    final tablet = Responsive.isTablet(context);
 
     return Scaffold(
       appBar: HomeAppBar(
@@ -816,115 +819,127 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // ============ ШАПКА КЛИЕНТА ============
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            color: Colors.pink[50],
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: tablet ? 900 : double.infinity,
+          ),
+          child: Column(
+            children: [
+              // ============ ШАПКА КЛИЕНТА ============
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(Responsive.pad(context)),
+                color: Colors.pink[50],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Text(_client.name,
-                          style: const TextStyle(
-                              fontSize: 30, fontWeight: FontWeight.bold)),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.edit, size: 28),
-                      tooltip: 'Изменить имя и телефон',
-                      onPressed: _editClientProfile,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.edit_note, size: 32),
-                      tooltip: 'Заметка о клиенте',
-                      onPressed: _editClientNote,
-                    ),
-                  ],
-                ),
-                if (_client.phone != null) ...[
-                  const SizedBox(height: 4),
-                  Text('📞 ${_client.phone}',
-                      style:
-                          TextStyle(fontSize: 20, color: Colors.grey[700])),
-                ],
-                if (_client.note != null && _client.note!.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.pink[200]!),
-                    ),
-                    child: Row(
+                    Row(
                       children: [
-                        const Icon(Icons.info_outline,
-                            color: Colors.orange, size: 22),
-                        const SizedBox(width: 8),
                         Expanded(
-                          child: Text(_client.note!,
-                              style: const TextStyle(fontSize: 18)),
+                          child: Text(_client.name,
+                              style: TextStyle(
+                                  fontSize: Responsive.fs(context, 30),
+                                  fontWeight: FontWeight.bold)),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.edit, size: 28),
+                          tooltip: 'Изменить имя и телефон',
+                          onPressed: _editClientProfile,
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.edit_note, size: 32),
+                          tooltip: 'Заметка о клиенте',
+                          onPressed: _editClientNote,
                         ),
                       ],
                     ),
-                  ),
-                ],
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    _miniStat('Визитов', '${_sessions.length}'),
-                    const SizedBox(width: 20),
-                    _miniStat('Всего', '${totalSum.toInt()} ₽'),
-                    const SizedBox(width: 20),
-                    _miniStat(
-                        'Среднее',
-                        _sessions.isEmpty
-                            ? '0 ₽'
-                            : '${(totalSum / _sessions.length).toInt()} ₽'),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: _sessions.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    if (_client.phone != null) ...[
+                      const SizedBox(height: 4),
+                      Text('📞 ${_client.phone}',
+                          style: TextStyle(
+                              fontSize: Responsive.fs(context, 20),
+                              color: Colors.grey[700])),
+                    ],
+                    if (_client.note != null && _client.note!.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.pink[200]!),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.info_outline,
+                                color: Colors.orange, size: 22),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(_client.note!,
+                                  style: TextStyle(
+                                      fontSize: Responsive.fs(context, 18))),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    Row(
                       children: [
-                        Icon(Icons.photo_library_outlined,
-                            size: 80, color: Colors.grey[400]),
-                        const SizedBox(height: 20),
-                        Text('Пока нет визитов',
-                            style: TextStyle(
-                                fontSize: 22, color: Colors.grey[600])),
-                        const SizedBox(height: 8),
-                        Text('Нажмите + чтобы добавить фото "до"',
-                            style:
-                                TextStyle(fontSize: 16, color: Colors.grey)),
+                        _miniStat('Визитов', '${_sessions.length}'),
+                        const SizedBox(width: 20),
+                        _miniStat('Всего', '${totalSum.toInt()} ₽'),
+                        const SizedBox(width: 20),
+                        _miniStat(
+                            'Среднее',
+                            _sessions.isEmpty
+                                ? '0 ₽'
+                                : '${(totalSum / _sessions.length).toInt()} ₽'),
                       ],
                     ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(8),
-                    itemCount: _sessions.length,
-                    itemBuilder: (context, index) {
-                      final session = _sessions[index];
-                      return _buildSessionCard(session);
-                    },
-                  ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: _sessions.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.photo_library_outlined,
+                                size: 80, color: Colors.grey[400]),
+                            const SizedBox(height: 20),
+                            Text('Пока нет визитов',
+                                style: TextStyle(
+                                    fontSize: Responsive.fs(context, 22),
+                                    color: Colors.grey[600])),
+                            const SizedBox(height: 8),
+                            Text('Нажмите + чтобы добавить фото "до"',
+                                style: TextStyle(
+                                    fontSize: Responsive.fs(context, 16),
+                                    color: Colors.grey)),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(8),
+                        itemCount: _sessions.length,
+                        itemBuilder: (context, index) {
+                          final session = _sessions[index];
+                          return _buildSessionCard(session);
+                        },
+                      ),
+              ),
+              if (_isLoading)
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+            ],
           ),
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-        ],
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _isLoading ? null : _addSessionWithBeforePhoto,
@@ -939,7 +954,8 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: TextStyle(fontSize: 18, color: Colors.grey[600])),
+            style: TextStyle(
+                fontSize: Responsive.fs(context, 18), color: Colors.grey[600])),
         Text(value,
             style: const TextStyle(
                 fontSize: 26,

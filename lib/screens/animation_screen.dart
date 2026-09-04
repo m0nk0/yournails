@@ -8,6 +8,8 @@ import 'package:share_plus/share_plus.dart';
 import '../models/master.dart';
 import '../models/nail_session.dart';
 import '../services/database_service.dart';
+import '../utils/responsive.dart';
+import '../utils/top_message.dart';
 import '../widgets/video_renderer.dart';
 
 class AnimationScreen extends StatefulWidget {
@@ -171,33 +173,18 @@ class _AnimationScreenState extends State<AnimationScreen>
       if (mounted) {
         if (toGallery) {
           await Gal.putVideo(outputPath);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Видео сохранено в галерею'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          // success-снэкбар убран — не закрывает кнопки
         } else {
           await Share.shareXFiles(
             [XFile(outputPath)],
             text: 'Моя работа 💅 до и после',
           );
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Видео готово и отправлено'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          // success-снэкбар убран — не закрывает кнопки
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка экспорта: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        TopMessage.show(context, 'Ошибка экспорта: $e');
       }
     } finally {
       if (mounted) {
@@ -232,7 +219,7 @@ class _AnimationScreenState extends State<AnimationScreen>
           label,
           style: TextStyle(
             color: isSelected ? Colors.white : Colors.white70,
-            fontSize: 15,
+            fontSize: Responsive.fs(context, 15),
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),
@@ -263,7 +250,7 @@ class _AnimationScreenState extends State<AnimationScreen>
           label,
           style: TextStyle(
             color: isSelected ? Colors.white : Colors.white70,
-            fontSize: 13,
+            fontSize: Responsive.fs(context, 13),
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),
@@ -292,6 +279,7 @@ class _AnimationScreenState extends State<AnimationScreen>
   Widget build(BuildContext context) {
     final tpl = VideoTemplates.get(_template);
     final groupTemplates = _getTemplatesForGroup(_selectedGroup);
+    final tablet = Responsive.isTablet(context);
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -333,192 +321,206 @@ class _AnimationScreenState extends State<AnimationScreen>
                 ),
                 Container(
                   color: Colors.black87,
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // ===== ВЫБОР МАСТЕРА =====
-                      if (_masters.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.person,
-                                  color: Colors.pink, size: 20),
-                              const SizedBox(width: 8),
-                              const Text('Мастер: ',
-                                  style: TextStyle(
-                                      color: Colors.white70, fontSize: 14)),
-                              Expanded(
-                                child: _masters.length > 1
-                                    ? DropdownButton<Master>(
-                                        isExpanded: true,
-                                        value: _selectedMaster,
-                                        items: _masters
-                                            .map((m) => DropdownMenuItem(
-                                                  value: m,
-                                                  child: Text(m.name,
-                                                      style: const TextStyle(
-                                                          fontSize: 14)),
-                                                ))
-                                            .toList(),
-                                        onChanged: _onMasterChanged,
-                                        dropdownColor: Colors.black87,
-                                        style: const TextStyle(
-                                            color: Colors.white, fontSize: 14),
-                                        underline: const SizedBox(),
-                                      )
-                                    : Text(
-                                        _selectedMaster?.name ?? '',
-                                        style: const TextStyle(
-                                            color: Colors.white, fontSize: 14),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: tablet ? 720 : double.infinity,
+                      ),
+                      child: Padding(
+                        padding: EdgeInsets.all(Responsive.pad(context)),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // ===== ВЫБОР МАСТЕРА =====
+                            if (_masters.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.person,
+                                        color: Colors.pink, size: 20),
+                                    const SizedBox(width: 8),
+                                    Text('Мастер: ',
+                                        style: TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: Responsive.fs(context, 14))),
+                                    Expanded(
+                                      child: _masters.length > 1
+                                          ? DropdownButton<Master>(
+                                              isExpanded: true,
+                                              value: _selectedMaster,
+                                              items: _masters
+                                                  .map((m) => DropdownMenuItem(
+                                                        value: m,
+                                                        child: Text(m.name,
+                                                            style: TextStyle(
+                                                                fontSize:
+                                                                    Responsive.fs(
+                                                                        context, 14))),
+                                                      ))
+                                                  .toList(),
+                                              onChanged: _onMasterChanged,
+                                              dropdownColor: Colors.black87,
+                                              style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: Responsive.fs(context, 14)),
+                                              underline: const SizedBox(),
+                                            )
+                                          : Text(
+                                              _selectedMaster?.name ?? '',
+                                              style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: Responsive.fs(context, 14)),
+                                            ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                            // ===== ГРУППЫ ШАБЛОНОВ =====
+                            SizedBox(
+                              height: 44,
+                              child: Row(
+                                children: ['🔥 Тренды', '📼 Классика'].map((group) {
+                                  return Expanded(
+                                    child: Padding(
+                                      padding:
+                                          const EdgeInsets.symmetric(horizontal: 3),
+                                      child: _buildGroupChip(
+                                        label: group,
+                                        isSelected: _selectedGroup == group,
+                                        onTap: () {
+                                          setState(() {
+                                            _selectedGroup = group;
+                                            final templates =
+                                                _getTemplatesForGroup(group);
+                                            _template = templates.first;
+                                          });
+                                          _syncController();
+                                        },
                                       ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+
+                                                // ===== ШАБЛОНЫ В ВЫБРАННОЙ ГРУППЕ (в линию, по центру) =====
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  minWidth: MediaQuery.of(context).size.width - 48,
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: groupTemplates.map((t) {
+                                    final cfg = VideoTemplates.get(t);
+                                    return Padding(
+                                      padding:
+                                          const EdgeInsets.symmetric(horizontal: 4),
+                                      child: _buildTemplateChip(
+                                        label: '${cfg.icon} ${cfg.name}',
+                                        isSelected: _template == t,
+                                        onTap: () {
+                                          setState(() => _template = t);
+                                          _syncController();
+                                        },
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                            ),
+
+                            // ===== ПЕРЕХОДЫ (только для классики) =====
+                            if (_selectedGroup == '📼 Классика') ...[
+                              const SizedBox(height: 8),
+                              SizedBox(
+                                height: 44,
+                                child: ListView(
+                                  scrollDirection: Axis.horizontal,
+                                  children: TransitionType.values.map((tr) {
+                                    final names = {
+                                      TransitionType.sparkles: '✨ Блёстки',
+                                      TransitionType.circle: '⭕ Круг',
+                                      TransitionType.flash: '⚡ Вспышка',
+                                      TransitionType.wipe: '🎭 Шторка',
+                                      TransitionType.zoom: '🎯 Зум',
+                                      TransitionType.slide: '📱 Слайд',
+                                      TransitionType.fade: '🌫 Фейд',
+                                    };
+                                    return Padding(
+                                      padding:
+                                          const EdgeInsets.symmetric(horizontal: 4),
+                                      child: _buildTemplateChip(
+                                        label: names[tr]!,
+                                        isSelected: _transition == tr,
+                                        onTap: () => setState(() => _transition = tr),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
                               ),
                             ],
-                          ),
-                        ),
 
-                      // ===== ГРУППЫ ШАБЛОНОВ =====
-                      SizedBox(
-                        height: 44,
-                        child: Row(
-                          children: ['🔥 Тренды', '📼 Классика'].map((group) {
-                            return Expanded(
-                              child: Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 3),
-                                child: _buildGroupChip(
-                                  label: group,
-                                  isSelected: _selectedGroup == group,
-                                  onTap: () {
-                                    setState(() {
-                                      _selectedGroup = group;
-                                      final templates =
-                                          _getTemplatesForGroup(group);
-                                      _template = templates.first;
-                                    });
-                                    _syncController();
-                                  },
-                                ),
+                            const SizedBox(height: 12),
+                            if (_isExporting) ...[
+                              LinearProgressIndicator(
+                                value: _exportProgress,
+                                backgroundColor: Colors.white10,
+                                valueColor:
+                                    const AlwaysStoppedAnimation<Color>(Colors.pink),
                               ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-
-                                          // ===== ШАБЛОНЫ В ВЫБРАННОЙ ГРУППЕ (в линию, по центру) =====
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            minWidth: MediaQuery.of(context).size.width - 48,
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: groupTemplates.map((t) {
-                              final cfg = VideoTemplates.get(t);
-                              return Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 4),
-                                child: _buildTemplateChip(
-                                  label: '${cfg.icon} ${cfg.name}',
-                                  isSelected: _template == t,
-                                  onTap: () {
-                                    setState(() => _template = t);
-                                    _syncController();
-                                  },
+                              const SizedBox(height: 8),
+                            ],
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: _isExporting
+                                        ? null
+                                        : () => _exportMp4(toGallery: true),
+                                    icon: _isExporting
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2, color: Colors.white))
+                                        : const Icon(Icons.download, size: 20),
+                                    label: Text('Видео в галерею',
+                                        style: TextStyle(fontSize: Responsive.fs(context, 14))),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.white,
+                                      side: const BorderSide(color: Colors.white38),
+                                      padding:
+                                          EdgeInsets.symmetric(vertical: tablet ? 14 : 12),
+                                    ),
+                                  ),
                                 ),
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                      ),
-
-                      // ===== ПЕРЕХОДЫ (только для классики) =====
-                      if (_selectedGroup == '📼 Классика') ...[
-                        const SizedBox(height: 8),
-                        SizedBox(
-                          height: 44,
-                          child: ListView(
-                            scrollDirection: Axis.horizontal,
-                            children: TransitionType.values.map((tr) {
-                              final names = {
-                                TransitionType.sparkles: '✨ Блёстки',
-                                TransitionType.circle: '⭕ Круг',
-                                TransitionType.flash: '⚡ Вспышка',
-                                TransitionType.wipe: '🎭 Шторка',
-                                TransitionType.zoom: '🎯 Зум',
-                                TransitionType.slide: '📱 Слайд',
-                                TransitionType.fade: '🌫 Фейд',
-                              };
-                              return Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 4),
-                                child: _buildTemplateChip(
-                                  label: names[tr]!,
-                                  isSelected: _transition == tr,
-                                  onTap: () => setState(() => _transition = tr),
+                                SizedBox(width: tablet ? 12 : 8),
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed:
+                                        _isExporting ? null : () => _exportMp4(),
+                                    icon: const Icon(Icons.share, size: 20),
+                                    label: Text('Поделиться',
+                                        style: TextStyle(fontSize: Responsive.fs(context, 14))),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.pink,
+                                      foregroundColor: Colors.white,
+                                      padding:
+                                          EdgeInsets.symmetric(vertical: tablet ? 14 : 12),
+                                    ),
+                                  ),
                                 ),
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                      ],
-
-                      const SizedBox(height: 12),
-                      if (_isExporting) ...[
-                        LinearProgressIndicator(
-                          value: _exportProgress,
-                          backgroundColor: Colors.white10,
-                          valueColor:
-                              const AlwaysStoppedAnimation<Color>(Colors.pink),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: _isExporting
-                                  ? null
-                                  : () => _exportMp4(toGallery: true),
-                              icon: _isExporting
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2, color: Colors.white))
-                                  : const Icon(Icons.download, size: 20),
-                              label: const Text('Видео в галерею',
-                                  style: TextStyle(fontSize: 14)),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.white,
-                                side: const BorderSide(color: Colors.white38),
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 12),
-                              ),
+                              ],
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed:
-                                  _isExporting ? null : () => _exportMp4(),
-                              icon: const Icon(Icons.share, size: 20),
-                              label: const Text('Поделиться',
-                                  style: TextStyle(fontSize: 14)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.pink,
-                                foregroundColor: Colors.white,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 12),
-                              ),
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ],

@@ -14,6 +14,8 @@ import '../models/nail_shape.dart';
 import '../models/nail_pattern.dart';
 import '../models/my_design.dart';
 import '../services/database_service.dart';
+import '../utils/responsive.dart';
+import '../utils/top_message.dart';
 import '../widgets/home_app_bar.dart';
 import '../widgets/nail_pattern_layer.dart';
 import '../widgets/nail_3d_renderer.dart';
@@ -247,22 +249,10 @@ class _ResultScreenState extends State<ResultScreen> {
     try {
       final bytes = await _renderTryOnImage(withDesign: true);
       await Gal.putImageBytes(bytes);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Сохранено в галерею'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      // success-снэкбар убран — не закрывает кнопки
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        TopMessage.show(context, 'Ошибка: $e');
       }
     } finally {
       setState(() => _isSaving = false);
@@ -317,15 +307,7 @@ class _ResultScreenState extends State<ResultScreen> {
         shadowIntensity: design.shadowIntensity,
         createdAt: DateTime.now(),
       ));
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Дизайн сохранён в коллекцию'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      // success-снэкбар убран — не закрывает кнопки
     }
   }
 
@@ -447,23 +429,10 @@ class _ResultScreenState extends State<ResultScreen> {
         beforePhotoPath: beforePath,
         tryOnPhotoPath: tryOnPath,
       );
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Сохранено клиенту: ${client.name}'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      // success-снэкбар убран — не закрывает кнопки
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка при сохранении: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        TopMessage.show(context, 'Ошибка при сохранении: $e');
       }
     } finally {
       setState(() => _isSaving = false);
@@ -473,6 +442,7 @@ class _ResultScreenState extends State<ResultScreen> {
   @override
   Widget build(BuildContext context) {
     final render = design.getRender();
+    final tablet = Responsive.isTablet(context);
 
     return Scaffold(
       appBar: const HomeAppBar(
@@ -508,107 +478,129 @@ class _ResultScreenState extends State<ResultScreen> {
             ),
           ),
 
-          // Панель поверх
+          // Панель поверх (на планшете — центрирована, ограничена по ширине)
           Positioned(
             bottom: 0,
             left: 0,
             right: 0,
-            child: Container(
-              color: Colors.black87,
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: tablet ? 720 : double.infinity,
+                ),
+                child: Container(
+                  color: tablet ? Colors.black87.withOpacity(0.92) : Colors.black87,
+                  padding: EdgeInsets.all(Responsive.pad(context)),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          color: render.color,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          '${design.color?.name ?? 'Цвет'} • ${design.density.toInt()} сл. • ${NailPattern.getTypeName(design.pattern.type)}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 20,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              color: render.color,
+                              shape: BoxShape.circle,
+                            ),
                           ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              '${design.color?.name ?? 'Цвет'} • ${design.density.toInt()} сл. • ${NailPattern.getTypeName(design.pattern.type)}',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: Responsive.fs(context, 16),
+                                fontWeight: FontWeight.bold,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: tablet ? 16 : 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(context),
+                              style: OutlinedButton.styleFrom(
+                                padding: EdgeInsets.symmetric(
+                                    vertical: tablet ? 16 : 14),
+                                foregroundColor: Colors.white,
+                                side: const BorderSide(color: Colors.white),
+                              ),
+                              child: Text('← Назад',
+                                  style: TextStyle(
+                                      fontSize: Responsive.fs(context, 16))),
+                            ),
+                          ),
+                          SizedBox(width: tablet ? 16 : 12),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: _isSaving ? null : _saveToClient,
+                              icon: _isSaving
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.person_pin),
+                              label: Text(
+                                  _isSaving
+                                      ? 'Сохранение...'
+                                      : 'Сохранить клиенту',
+                                  style: TextStyle(
+                                      fontSize: Responsive.fs(context, 15))),
+                              style: ElevatedButton.styleFrom(
+                                padding: EdgeInsets.symmetric(
+                                    vertical: tablet ? 16 : 14),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: tablet ? 12 : 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _saveToCollection,
+                              icon: const Icon(Icons.bookmark_add),
+                              label: Text('В коллекцию',
+                                  style: TextStyle(
+                                      fontSize: Responsive.fs(context, 14))),
+                              style: OutlinedButton.styleFrom(
+                                padding: EdgeInsets.symmetric(
+                                    vertical: tablet ? 14 : 12),
+                                foregroundColor: Colors.white,
+                                side: const BorderSide(color: Colors.white54),
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: tablet ? 12 : 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _isSaving ? null : _saveToGallery,
+                              icon: const Icon(Icons.download),
+                              label: Text('В галерею',
+                                  style: TextStyle(
+                                      fontSize: Responsive.fs(context, 14))),
+                              style: OutlinedButton.styleFrom(
+                                padding: EdgeInsets.symmetric(
+                                    vertical: tablet ? 14 : 12),
+                                foregroundColor: Colors.white,
+                                side: const BorderSide(color: Colors.white54),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.pop(context),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            foregroundColor: Colors.white,
-                            side: const BorderSide(color: Colors.white),
-                          ),
-                          child: const Text('← Назад'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _isSaving ? null : _saveToClient,
-                          icon: _isSaving
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(Icons.person_pin),
-                          label: Text(
-                              _isSaving ? 'Сохранение...' : 'Сохранить клиенту'),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _saveToCollection,
-                          icon: const Icon(Icons.bookmark_add),
-                          label: const Text('В коллекцию'),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            foregroundColor: Colors.white,
-                            side: const BorderSide(color: Colors.white54),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _isSaving ? null : _saveToGallery,
-                          icon: const Icon(Icons.download),
-                          label: const Text('В галерею'),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            foregroundColor: Colors.white,
-                            side: const BorderSide(color: Colors.white54),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                ),
               ),
             ),
           ),

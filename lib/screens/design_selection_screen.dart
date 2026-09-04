@@ -10,6 +10,8 @@ import '../models/nail_pattern.dart';
 import '../models/my_design.dart';
 import '../services/design_sets_service.dart';
 import '../services/database_service.dart';
+import '../utils/responsive.dart';
+import '../utils/top_message.dart';
 import '../widgets/nail_pattern_layer.dart';
 import 'color_picker_screen.dart';
 import 'material_picker_screen.dart';
@@ -68,7 +70,6 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
           density: d.density,
           brightness: d.brightness,
           pattern: d.pattern,
-          // ДОБАВИТЬ эти 3 строки:
           edgeDarken: d.edgeDarken,
           highlightIntensity: d.highlightIntensity,
           shadowIntensity: d.shadowIntensity,
@@ -86,12 +87,7 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
         );
       }
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Применено: ${d.name}'),
-        backgroundColor: Colors.green,
-      ),
-    );
+    // success-снэкбар убран — не закрывает кнопки
   }
 
   Future<void> _deleteMyDesign(MyDesign d) async {
@@ -267,148 +263,168 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final tablet = Responsive.isTablet(context);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Выбор дизайна', style: TextStyle(fontSize: 22)),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
       ),
-      body: Column(
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            color: Colors.pink[50],
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Ваш выбор:',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Цвет: ${_design.color?.name ?? 'Не выбран'}',
-                  style: const TextStyle(fontSize: 16),
-                ),
-                Text(
-                  'Материал: ${_design.material?.name ?? 'Не выбран'}',
-                  style: const TextStyle(fontSize: 16),
-                ),
-                Text(
-                  'Рисунок: ${NailPattern.getTypeName(_design.pattern.type)}',
-                  style: const TextStyle(fontSize: 16),
-                ),
-                if (_design.hasPattern)
-                  Text(
-                    'Узор-картинка: ${_design.patternName}',
-                    style: const TextStyle(fontSize: 16, color: Colors.pink),
-                  ),
-              ],
-            ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: tablet ? 720 : double.infinity,
           ),
-
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                const Text(
-                  'Мои дизайны',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Тап — применить • Долгое нажатие — удалить',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 130,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    children: [
-                      _buildAddTile(),
-                      ..._myDesigns.map((d) => _buildMyDesignTile(d)),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                _buildSelectionCard(
-                  icon: Icons.palette,
-                  title: 'Цвет',
-                  subtitle: _design.color?.name ?? 'Выберите цвет',
-                  color: _design.color?.color ?? Colors.grey[300]!,
-                  onTap: _openColorPicker,
-                ),
-                const SizedBox(height: 12),
-
-                _buildSelectionCard(
-                  icon: Icons.diamond,
-                  title: 'Материал',
-                  subtitle: _design.material?.name ?? 'Выберите материал',
-                  color: Colors.pink[100]!,
-                  onTap: _openMaterialPicker,
-                ),
-                const SizedBox(height: 12),
-
-                _buildSelectionCard(
-                  icon: Icons.auto_awesome,
-                  title: 'Рисунок',
-                  subtitle: NailPattern.getTypeName(_design.pattern.type),
-                  color: _design.pattern.isNone
-                      ? Colors.grey[300]!
-                      : _design.pattern.color,
-                  onTap: _openPatternPicker,
-                ),
-              ],
-            ),
-          ),
-
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _design.hasColor ? _applyDesign : null,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  backgroundColor: Colors.pink,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text(
-                  'Применить дизайн',
-                  style: TextStyle(fontSize: 18),
+          child: Column(
+            children: [
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(Responsive.pad(context)),
+                color: Colors.pink[50],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Ваш выбор:',
+                      style: TextStyle(
+                          fontSize: Responsive.fs(context, 18),
+                          fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Цвет: ${_design.color?.name ?? 'Не выбран'}',
+                      style: TextStyle(fontSize: Responsive.fs(context, 16)),
+                    ),
+                    Text(
+                      'Материал: ${_design.material?.name ?? 'Не выбран'}',
+                      style: TextStyle(fontSize: Responsive.fs(context, 16)),
+                    ),
+                    Text(
+                      'Рисунок: ${NailPattern.getTypeName(_design.pattern.type)}',
+                      style: TextStyle(fontSize: Responsive.fs(context, 16)),
+                    ),
+                    if (_design.hasPattern)
+                      Text(
+                        'Узор-картинка: ${_design.patternName}',
+                        style: TextStyle(
+                            fontSize: Responsive.fs(context, 16),
+                            color: Colors.pink),
+                      ),
+                  ],
                 ),
               ),
-            ),
+
+              Expanded(
+                child: ListView(
+                  padding: EdgeInsets.all(Responsive.pad(context)),
+                  children: [
+                    Text(
+                      'Мои дизайны',
+                      style: TextStyle(
+                          fontSize: Responsive.fs(context, 20),
+                          fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Тап — применить • Долгое нажатие — удалить',
+                      style: TextStyle(
+                          fontSize: Responsive.fs(context, 12),
+                          color: Colors.grey[600]),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: tablet ? 160 : 130,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: [
+                          _buildAddTile(),
+                          ..._myDesigns.map((d) => _buildMyDesignTile(d)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    _buildSelectionCard(
+                      icon: Icons.palette,
+                      title: 'Цвет',
+                      subtitle: _design.color?.name ?? 'Выберите цвет',
+                      color: _design.color?.color ?? Colors.grey[300]!,
+                      onTap: _openColorPicker,
+                    ),
+                    const SizedBox(height: 12),
+
+                    _buildSelectionCard(
+                      icon: Icons.diamond,
+                      title: 'Материал',
+                      subtitle: _design.material?.name ?? 'Выберите материал',
+                      color: Colors.pink[100]!,
+                      onTap: _openMaterialPicker,
+                    ),
+                    const SizedBox(height: 12),
+
+                    _buildSelectionCard(
+                      icon: Icons.auto_awesome,
+                      title: 'Рисунок',
+                      subtitle: NailPattern.getTypeName(_design.pattern.type),
+                      color: _design.pattern.isNone
+                          ? Colors.grey[300]!
+                          : _design.pattern.color,
+                      onTap: _openPatternPicker,
+                    ),
+                  ],
+                ),
+              ),
+
+              Padding(
+                padding: EdgeInsets.all(Responsive.pad(context)),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _design.hasColor ? _applyDesign : null,
+                    style: ElevatedButton.styleFrom(
+                      padding: EdgeInsets.symmetric(
+                          vertical: tablet ? 18 : 16),
+                      backgroundColor: Colors.pink,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: Text(
+                      'Применить дизайн',
+                      style: TextStyle(fontSize: Responsive.fs(context, 18)),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildAddTile() {
+    final tablet = Responsive.isTablet(context);
     return GestureDetector(
       onTap: _uploadImage,
       child: Container(
-        width: 90,
+        width: tablet ? 110 : 90,
         margin: const EdgeInsets.only(right: 8),
         decoration: BoxDecoration(
           color: Colors.pink[50],
           border: Border.all(color: Colors.pink, width: 2),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: const Column(
+        child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.add_photo_alternate, color: Colors.pink, size: 32),
-            SizedBox(height: 4),
+            Icon(Icons.add_photo_alternate,
+                color: Colors.pink, size: tablet ? 38 : 32),
+            const SizedBox(height: 4),
             Text(
               'Загрузить',
               style: TextStyle(
                 color: Colors.pink,
-                fontSize: 12,
+                fontSize: Responsive.fs(context, 12),
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -422,12 +438,13 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
     final isSelected = d.isImage
         ? _design.patternPath == d.imagePath
         : _design.color?.id == d.colorId;
+    final tablet = Responsive.isTablet(context);
 
     return GestureDetector(
       onTap: () => _applyMyDesign(d),
       onLongPress: () => _deleteMyDesign(d),
       child: Container(
-        width: 90,
+        width: tablet ? 110 : 90,
         margin: const EdgeInsets.only(right: 8),
         child: Column(
           children: [
@@ -456,7 +473,7 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
             const SizedBox(height: 4),
             Text(
               d.name,
-              style: const TextStyle(fontSize: 10),
+              style: TextStyle(fontSize: Responsive.fs(context, 10)),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
@@ -523,11 +540,15 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
         ),
         title: Text(
           title,
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          style: TextStyle(
+              fontSize: Responsive.fs(context, 20),
+              fontWeight: FontWeight.bold),
         ),
         subtitle: Text(
           subtitle,
-          style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+          style: TextStyle(
+              fontSize: Responsive.fs(context, 16),
+              color: Colors.grey[600]),
         ),
         trailing: const Icon(Icons.chevron_right, size: 32),
         onTap: onTap,

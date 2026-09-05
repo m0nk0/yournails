@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../models/nail_zone.dart';
 import '../models/selected_design.dart';
@@ -48,6 +51,14 @@ class _EditScreenState extends State<EditScreen> {
   double _cuticleDepth = 0.5;
   double _cuticleLength = 0.8;
   int _cuticleTone = 1;
+  Color? _cuticleColor; // пипетка — цвет кожи клиента
+
+  // Режим пипетки (тап по фото → взять цвет)
+  bool _pickingCuticle = false;
+
+  // Кэш декодированного фото (для пипетки)
+  ui.Image? _photoImage;
+  Rect? _photoRect; // где фото рисуется на экране (для пересчёта координат)
 
   // Режим панели: 0 = базовый, 1 = 3D, 2 = кутикула, 3 = формы
   int _mode = 0;
@@ -55,10 +66,7 @@ class _EditScreenState extends State<EditScreen> {
   // Рамка
   bool _showFrame = true;
 
-  // Панель слоёв видима / скрыта (остаётся глаз)
-  bool _layersVisible = true;
-
-  // Панель снизу: раскрыта/свёрнута (на телефоне можно свернуть, чтобы видеть фото)
+  // Панель снизу: раскрыта/свёрнута
   bool _panelOpen = true;
 
   // Слои (как в фотошопе)
@@ -67,6 +75,9 @@ class _EditScreenState extends State<EditScreen> {
   bool _showBgLayer = true;
   bool _lockNail = false;
   bool _lockBg = false;
+
+  // Панель слоёв видима / скрыта
+  bool _layersVisible = true;
 
   bool _initialized = false;
 
@@ -80,17 +91,92 @@ class _EditScreenState extends State<EditScreen> {
       _frameCenter = Offset(size.width / 2, size.height / 2.5);
       _initialized = true;
     }
+    _decodePhoto();
+  }
+
+  /// Декодирует фото в ui.Image и вычисляет Rect (BoxFit.contain)
+  Future<void> _decodePhoto() async {
+    final bytes = await widget.imageFile.readAsBytes();
+    final completer = Completer<ui.Image>();
+    ui.decodeImageFromList(bytes, (i) => completer.complete(i));
+    final img = await completer.future;
+    if (!mounted) return;
+
+    final mq = MediaQuery.of(context);
+    final W = mq.size.width;
+    final H = mq.size.height - mq.padding.top - AppBar().preferredSize.height;
+    final s = math.min(W / img.width, H / img.height);
+    final w = img.width * s * _imageScale;
+    final h = img.height * s * _imageScale;
+    final cx = W / 2 + _imageOffset.dx;
+    final cy = H / 2 + _imageOffset.dy;
+
+    setState(() {
+      _photoImage = img;
+      _photoRect = Rect.fromLTWH(cx - w / 2, cy - h / 2, w, h);
+    });
+  }
+
+  @override
+  void dispose() {
+    _photoImage?.dispose();
+    super.dispose();
   }
 
   void _onPhotoScaleStart(ScaleStartDetails details) {
+    if (_pickingCuticle) return;
     _baseScale = _imageScale;
   }
 
   void _onPhotoScaleUpdate(ScaleUpdateDetails details) {
+    if (_pickingCuticle) return;
     setState(() {
       _imageOffset += details.focalPointDelta;
       _imageScale = (_baseScale * details.scale).clamp(0.5, 4.0);
     });
+    _decodePhoto(); // пересчитать Rect
+  }
+
+  /// Тап по фото в режиме пипетки — берём цвет пикселя
+  void _onPhotoTap(TapUpDetails details) {
+    if (!_pickingCuticle) return;
+    if (_photoImage == null || _photoRect == null) return;
+
+    final global = details.globalPosition;
+    final rect = _photoRect!;
+    if (!rect.contains(global)) {
+      TopMessage.show(context, 'Тапни по коже на фото', color: Colors.orange);
+      return;
+    }
+
+    // Пересчёт в координаты пикселя
+    final px = ((global.dx - rect.left) / rect.width * _photoImage!.width).round();
+    final py = ((global.dy - rect.top) / rect.height * _photoImage!.height).round();
+
+    _readPixel(px, py);
+  }
+
+  Future<void> _readPixel(int px, int py) async {
+    try {
+      final bytes = await _photoImage!.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (bytes == null) return;
+
+      final w = _photoImage!.width;
+      final idx = (py * w + px) * 4;
+      final r = bytes.getUint8(idx);
+      final g = bytes.getUint8(idx + 1);
+      final b = bytes.getUint8(idx + 2);
+      final a = bytes.getUint8(idx + 3);
+
+      final picked = Color.fromARGB(a, r, g, b);
+      setState(() {
+        _cuticleColor = picked;
+        _pickingCuticle = false;
+      });
+      TopMessage.show(context, 'Цвет кожи взят! ✓', color: Colors.green);
+    } catch (e) {
+      TopMessage.show(context, 'Не удалось взять цвет: $e');
+    }
   }
 
   SelectedDesign _buildCurrentDesign() {
@@ -110,6 +196,7 @@ class _EditScreenState extends State<EditScreen> {
       cuticleDepth: _cuticleDepth,
       cuticleLength: _cuticleLength,
       cuticleTone: _cuticleTone,
+      cuticleColor: _cuticleColor,
     );
   }
 
@@ -136,12 +223,13 @@ class _EditScreenState extends State<EditScreen> {
         _cuticleDepth = result.cuticleDepth;
         _cuticleLength = result.cuticleLength;
         _cuticleTone = result.cuticleTone;
+        _cuticleColor = result.cuticleColor;
       });
     }
   }
 
   void _saveAndNext() {
-        if (!_hasDesign) {
+    if (!_hasDesign) {
       TopMessage.show(context, 'Выберите дизайн', color: Colors.orange);
       return;
     }
@@ -172,6 +260,7 @@ class _EditScreenState extends State<EditScreen> {
       cuticleDepth: _cuticleDepth,
       cuticleLength: _cuticleLength,
       cuticleTone: _cuticleTone,
+      cuticleColor: _cuticleColor,
     );
 
     Navigator.push(
@@ -282,7 +371,6 @@ class _EditScreenState extends State<EditScreen> {
     );
   }
 
-  /// Кнопка-переключатель режима (3D / Формы / Кутикула)
   Widget _modeButton(String label, int mode, {double width = 70}) {
     return GestureDetector(
       onTap: () => setState(() => _mode = _mode == mode ? 0 : mode),
@@ -312,7 +400,6 @@ class _EditScreenState extends State<EditScreen> {
     );
   }
 
-  /// Строка панели слоёв (адаптивная)
   Widget _layerRow(String name, IconData icon, bool visible, bool? locked,
       VoidCallback onToggleVisible, VoidCallback? onToggleLock) {
     final compact = Responsive.isCompact(context);
@@ -363,27 +450,68 @@ class _EditScreenState extends State<EditScreen> {
       ),
       body: Stack(
         children: [
-          // ФОН (фото)
+          // ФОН (фото) — с поддержкой пипетки и тапа
           Positioned.fill(
             child: GestureDetector(
               onScaleStart: _lockBg ? null : _onPhotoScaleStart,
               onScaleUpdate: _lockBg ? null : _onPhotoScaleUpdate,
-              child: _showBgLayer
-                  ? Transform.translate(
-                      offset: _imageOffset,
-                      child: Transform.scale(
-                        scale: _imageScale,
-                        child: Image.file(
-                          widget.imageFile,
-                          fit: BoxFit.contain,
+              onTapUp: _pickingCuticle ? _onPhotoTap : null,
+              child: Stack(
+  children: [
+    if (_showBgLayer)
+      Positioned.fill(
+        child: Transform.translate(
+          offset: _imageOffset,
+          child: Transform.scale(
+            scale: _imageScale,
+            child: Image.file(
+              widget.imageFile,
+              fit: BoxFit.contain,
+            ),
+          ),
+        ),
+      ),
+
+                  // Подсветка режима пипетки
+                  if (_pickingCuticle)
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.pink, width: 4),
+                        ),
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: Colors.black87,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.colorize,
+                                    color: Colors.pink, size: 20),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Тапни по коже на фото',
+                                  style: TextStyle(
+                                      color: Colors.white, fontSize: 14),
+                                ),
+                                SizedBox(width: 8),
+                                Icon(Icons.close,
+                                    color: Colors.white70, size: 18),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                    )
-                  : const SizedBox.shrink(),
+                    ),
+                ],
+              ),
             ),
           ),
 
-                    // Подсказка: на планшете по центру, на телефоне слева (не мешает панели)
           Positioned(
             top: 16,
             left: 0,
@@ -423,7 +551,7 @@ class _EditScreenState extends State<EditScreen> {
                   ),
           ),
 
-          // ПАНЕЛЬ СЛОЁВ — в правый верхний угол до упора + скрытие (остаётся глаз)
+          // ПАНЕЛЬ СЛОЁВ
           Positioned(
             top: 8,
             right: 8,
@@ -439,7 +567,6 @@ class _EditScreenState extends State<EditScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Кнопка скрытия панели
                         Align(
                           alignment: Alignment.topRight,
                           child: InkWell(
@@ -487,13 +614,13 @@ class _EditScreenState extends State<EditScreen> {
                   ),
           ),
 
-          // НОГОТЬ (рамка)
+          // НОГОТЬ
           Positioned(
             left: _frameCenter.dx - _frameWidth / 2,
             top: _frameCenter.dy - _frameHeight / 2,
             child: GestureDetector(
               onPanUpdate: (details) {
-                if (_lockNail) return;
+                if (_lockNail || _pickingCuticle) return;
                 setState(() {
                   _frameCenter += details.delta;
                 });
@@ -505,7 +632,7 @@ class _EditScreenState extends State<EditScreen> {
             ),
           ),
 
-          // ===== НИЖНЯЯ ПАНЕЛЬ (сворачиваемая) =====
+          // ===== НИЖНЯЯ ПАНЕЛЬ =====
           Positioned(
             bottom: 0,
             left: 0,
@@ -517,7 +644,6 @@ class _EditScreenState extends State<EditScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Ручка сворачивания
                     InkWell(
                       onTap: () => setState(() => _panelOpen = !_panelOpen),
                       child: Container(
@@ -546,7 +672,6 @@ class _EditScreenState extends State<EditScreen> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              // Верхняя строка: Дизайн + 3D + Формы + Кутикула
                               Row(
                                 children: [
                                   Expanded(
@@ -662,7 +787,7 @@ class _EditScreenState extends State<EditScreen> {
                                     (v) => setState(() => _shadowIntensity = v)),
                               ],
 
-                              // === РЕЖИМ КУТИКУЛА ===
+                              // === РЕЖИМ КУТИКУЛА (с пипеткой!) ===
                               if (_mode == 2) ...[
                                 _groupTitle('Лунка вокруг ногтя',
                                     Icons.water_drop),
@@ -676,34 +801,116 @@ class _EditScreenState extends State<EditScreen> {
                                     _cuticleDepth, 0.0, 1.0,
                                     (v) => setState(() => _cuticleDepth = v)),
                                 const SizedBox(height: 4),
+
+                                // Тон кожи: 4 кружка + пипетка + свой цвет
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
-                                  children:
-                                      List.generate(CuticleTones.values.length,
-                                          (i) {
-                                    final selected = _cuticleTone == i;
-                                    return GestureDetector(
-                                      onTap: () =>
-                                          setState(() => _cuticleTone = i),
+                                  children: [
+                                    ...List.generate(CuticleTones.values.length, (i) {
+                                      final selected =
+                                          _cuticleTone == i && _cuticleColor == null;
+                                      return GestureDetector(
+                                        onTap: () => setState(() {
+                                          _cuticleTone = i;
+                                          _cuticleColor = null;
+                                        }),
+                                        child: Container(
+                                          width: compact ? 30 : 36,
+                                          height: compact ? 30 : 36,
+                                          margin: EdgeInsets.symmetric(
+                                              horizontal: compact ? 3 : 4),
+                                          decoration: BoxDecoration(
+                                            color: CuticleTones.values[i],
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: selected
+                                                  ? Colors.white
+                                                  : Colors.white24,
+                                              width: selected ? 3 : 1,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }),
+
+                                    // Пипетка
+                                    GestureDetector(
+                                      onTap: () => setState(
+                                          () => _pickingCuticle = !_pickingCuticle),
                                       child: Container(
                                         width: compact ? 30 : 36,
                                         height: compact ? 30 : 36,
                                         margin: EdgeInsets.symmetric(
-                                            horizontal: compact ? 4 : 5),
+                                            horizontal: compact ? 3 : 4),
                                         decoration: BoxDecoration(
-                                          color: CuticleTones.values[i],
+                                          color: _pickingCuticle
+                                              ? Colors.pink
+                                              : Colors.white10,
                                           shape: BoxShape.circle,
                                           border: Border.all(
-                                            color: selected
-                                                ? Colors.white
-                                                : Colors.white24,
-                                            width: selected ? 3 : 1,
+                                            color: _pickingCuticle
+                                                ? Colors.pink
+                                                : Colors.white38,
+                                            width: 2,
+                                          ),
+                                        ),
+                                        child: Icon(
+                                          Icons.colorize,
+                                          color: _pickingCuticle
+                                              ? Colors.white
+                                              : Colors.white70,
+                                          size: 18,
+                                        ),
+                                      ),
+                                    ),
+
+                                    // 5-й кружок — цвет клиента
+                                    if (_cuticleColor != null)
+                                      GestureDetector(
+                                        onTap: () => setState(() {
+                                          // при тапе — активировать кастомный цвет
+                                          // (он уже активен, просто показываем что выбран)
+                                        }),
+                                        onLongPress: () => setState(() {
+                                          _cuticleColor = null; // сброс
+                                        }),
+                                        child: Container(
+                                          width: compact ? 30 : 36,
+                                          height: compact ? 30 : 36,
+                                          margin: EdgeInsets.symmetric(
+                                              horizontal: compact ? 3 : 4),
+                                          decoration: BoxDecoration(
+                                            color: _cuticleColor,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: Colors.white,
+                                              width: 3,
+                                            ),
+                                          ),
+                                          child: const Icon(
+                                            Icons.check,
+                                            color: Colors.white,
+                                            size: 16,
+                                            shadows: [
+                                              Shadow(color: Colors.black54, blurRadius: 2),
+                                            ],
                                           ),
                                         ),
                                       ),
-                                    );
-                                  }),
+                                  ],
                                 ),
+                                if (_cuticleColor != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 6),
+                                    child: Text(
+                                      '🎯 Цвет с фото • долгое нажатие — сброс',
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: compact ? 9 : 10,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ),
                               ],
 
                               // === БАЗОВЫЙ РЕЖИМ ===
@@ -747,7 +954,6 @@ class _EditScreenState extends State<EditScreen> {
                         ),
                       )
                     else
-                      // Свёрнуто: только «Далее»
                       Padding(
                         padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
                         child: SizedBox(
@@ -772,7 +978,6 @@ class _EditScreenState extends State<EditScreen> {
   }
 }
 
-/// Превью-силуэт формы ногтя в меню выбора.
 class _NailShapePreview extends CustomPainter {
   final NailShape shape;
   _NailShapePreview({required this.shape});
@@ -792,7 +997,6 @@ class _NailShapePreview extends CustomPainter {
       oldDelegate.shape != shape;
 }
 
-/// Рамка по контуру ногтя
 class _NailOutlinePainter extends CustomPainter {
   final NailShape shape;
   final Color color;
@@ -820,7 +1024,6 @@ class _NailOutlinePainter extends CustomPainter {
       oldDelegate.strokeWidth != strokeWidth;
 }
 
-/// Заливка плейсхолдера по контуру ногтя
 class _NailFillPainter extends CustomPainter {
   final NailShape shape;
   final Color fillColor;

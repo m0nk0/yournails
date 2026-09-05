@@ -33,6 +33,7 @@ class SelectedDesign {
   final double cuticleDepth;  // 0..1: темнее/светлее
   final double cuticleLength; // 0..1: как высоко поднимается к верху ногтя
   final int cuticleTone;      // 0..3: тон кожи
+  final Color? cuticleColor;  // цвет кожи клиента с фото (приоритетнее tone)
 
   SelectedDesign({
     this.color,
@@ -50,12 +51,54 @@ class SelectedDesign {
     this.cuticleDepth = 0.5,
     this.cuticleLength = 0.8,
     this.cuticleTone = 1,
+    this.cuticleColor,
   });
 
   bool get hasColor => color != null;
   bool get hasMaterial => material != null;
   bool get hasPattern => patternPath != null && patternPath!.isNotEmpty;
   bool get hasPatternDraw => !pattern.isNone;
+
+  SelectedDesign copyWith({
+    NailColor? color,
+    NailMaterial? material,
+    NailShape? shape,
+    double? density,
+    double? brightness,
+    NailPattern? pattern,
+    String? patternPath,
+    String? patternName,
+    double? edgeDarken,
+    double? highlightIntensity,
+    double? shadowIntensity,
+    double? cuticleWidth,
+    double? cuticleDepth,
+    double? cuticleLength,
+    int? cuticleTone,
+    Color? cuticleColor,
+    bool clearCuticleColor = false,
+  }) {
+    return SelectedDesign(
+      color: color ?? this.color,
+      material: material ?? this.material,
+      shape: shape ?? this.shape,
+      density: density ?? this.density,
+      brightness: brightness ?? this.brightness,
+      pattern: pattern ?? this.pattern,
+      patternPath: patternPath ?? this.patternPath,
+      patternName: patternName ?? this.patternName,
+      edgeDarken: edgeDarken ?? this.edgeDarken,
+      highlightIntensity: highlightIntensity ?? this.highlightIntensity,
+      shadowIntensity: shadowIntensity ?? this.shadowIntensity,
+      cuticleWidth: cuticleWidth ?? this.cuticleWidth,
+      cuticleDepth: cuticleDepth ?? this.cuticleDepth,
+      cuticleLength: cuticleLength ?? this.cuticleLength,
+      cuticleTone: cuticleTone ?? this.cuticleTone,
+      cuticleColor: clearCuticleColor
+          ? null
+          : (cuticleColor ?? this.cuticleColor),
+    );
+  }
 
   /// Вычисляет итоговый цвет и прозрачность
   DesignRender getRender() {

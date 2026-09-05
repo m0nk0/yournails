@@ -26,7 +26,8 @@ void drawSocketGroove(Canvas canvas, Path path, Size size, SelectedDesign design
   final baseStroke = size.width * widthParam * 0.09;
   final opacity = 0.15 + darkParam * 0.45;
 
-  final tone = CuticleTones.values[design.cuticleTone.clamp(0, 3)];
+    // Приоритет: кастомный цвет с фото > выбранный тон
+  final tone = design.cuticleColor ?? CuticleTones.values[design.cuticleTone.clamp(0, 3)];
   final hsl = HSLColor.fromColor(tone);
 
   final grooveColor = hsl

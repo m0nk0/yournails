@@ -73,6 +73,8 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
           edgeDarken: d.edgeDarken,
           highlightIntensity: d.highlightIntensity,
           shadowIntensity: d.shadowIntensity,
+          cuticleColor:
+              d.cuticleColor != null ? Color(d.cuticleColor!) : null,
         );
       } else {
         _design = SelectedDesign(

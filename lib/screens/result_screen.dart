@@ -184,7 +184,7 @@ class _ResultScreenState extends State<ResultScreen> {
         canvas.drawRect(rect, cPaint);
       }
 
-      // Слой 6: световая колонна — шире, размытее, яркость 0.45
+      // Слой 6: световая колонна
       if (design.highlightIntensity > 0) {
         final lPaint = Paint()
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10)
@@ -249,7 +249,6 @@ class _ResultScreenState extends State<ResultScreen> {
     try {
       final bytes = await _renderTryOnImage(withDesign: true);
       await Gal.putImageBytes(bytes);
-      // success-снэкбар убран — не закрывает кнопки
     } catch (e) {
       if (mounted) {
         TopMessage.show(context, 'Ошибка: $e');
@@ -305,9 +304,9 @@ class _ResultScreenState extends State<ResultScreen> {
         edgeDarken: design.edgeDarken,
         highlightIntensity: design.highlightIntensity,
         shadowIntensity: design.shadowIntensity,
+        cuticleColor: design.cuticleColor?.value, // ← цвет кожи клиента
         createdAt: DateTime.now(),
       ));
-      // success-снэкбар убран — не закрывает кнопки
     }
   }
 
@@ -429,7 +428,6 @@ class _ResultScreenState extends State<ResultScreen> {
         beforePhotoPath: beforePath,
         tryOnPhotoPath: tryOnPath,
       );
-      // success-снэкбар убран — не закрывает кнопки
     } catch (e) {
       if (mounted) {
         TopMessage.show(context, 'Ошибка при сохранении: $e');
@@ -478,7 +476,7 @@ class _ResultScreenState extends State<ResultScreen> {
             ),
           ),
 
-          // Панель поверх (на планшете — центрирована, ограничена по ширине)
+          // Панель поверх (на планшете — центрирована)
           Positioned(
             bottom: 0,
             left: 0,
@@ -489,7 +487,7 @@ class _ResultScreenState extends State<ResultScreen> {
                   maxWidth: tablet ? 720 : double.infinity,
                 ),
                 child: Container(
-                  color: tablet ? Colors.black87.withOpacity(0.92) : Colors.black87,
+                  color: Colors.black87,
                   padding: EdgeInsets.all(Responsive.pad(context)),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,

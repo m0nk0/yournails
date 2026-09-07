@@ -1,70 +1,19 @@
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import '../models/nail_color.dart';
+import 'library_service.dart';
 
-/// Хранение пользовательских ("Моих") цветов в JSON-файле
+/// «Мои цвета» — тонкий прокси к единой Библиотеке (library.json).
+/// Экраны (color_picker_screen, color_mixer_screen) продолжают
+/// вызывать старые методы — там ничего менять не нужно.
 class CustomColorService {
-  static List<NailColor>? _cache;
+  /// Загрузить все свои цвета
+  static Future<List<NailColor>> load() => LibraryService.getCustomColors();
 
-  static Future<File> _file() async {
-    final dir = await getApplicationDocumentsDirectory();
-    return File('${dir.path}/custom_colors.json');
-  }
+  /// Добавить новый цвет (из миксера)
+  static Future<List<NailColor>> add(String name, Color color) =>
+      LibraryService.addCustomColor(name, color);
 
-  static Future<List<NailColor>> load() async {
-    if (_cache != null) return _cache!;
-    final f = await _file();
-    if (!await f.exists()) {
-      _cache = [];
-      return _cache!;
-    }
-    try {
-      final raw = await f.readAsString();
-      final list = jsonDecode(raw) as List;
-      _cache = list
-          .map((e) => NailColor(
-                id: e['id'] as String,
-                name: e['name'] as String,
-                color: Color(e['value'] as int),
-                group: 'my',
-              ))
-          .toList();
-    } catch (_) {
-      _cache = [];
-    }
-    return _cache!;
-  }
-
-  static Future<List<NailColor>> add(String name, Color color) async {
-    await load();
-    _cache!.add(NailColor(
-      id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
-      name: name,
-      color: color,
-      group: 'my',
-    ));
-    await _save();
-    return _cache!;
-  }
-
-  static Future<List<NailColor>> delete(String id) async {
-    await load();
-    _cache!.removeWhere((c) => c.id == id);
-    await _save();
-    return _cache!;
-  }
-
-  static Future<void> _save() async {
-    final f = await _file();
-    final data = _cache!
-        .map((c) => {
-              'id': c.id,
-              'name': c.name,
-              'value': c.color.value,
-            })
-        .toList();
-    await f.writeAsString(jsonEncode(data));
-  }
+  /// Удалить цвет по id
+  static Future<List<NailColor>> delete(String id) =>
+      LibraryService.deleteCustomColor(id);
 }

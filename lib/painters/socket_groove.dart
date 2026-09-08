@@ -15,6 +15,10 @@ class CuticleTones {
 /// Рисует бороздку-лунку вокруг ногтя на заданном Path.
 /// Используется и на экране (painter), и в рендере (галерея/клиент).
 ///
+/// ВАЖНО: кожа обнимает ноготь только у кутикулы (низ ногтя).
+/// Свободный край (верх) ни с чем не контактирует — там бороздки быть
+/// не должно, иначе ноготь выглядит наклейкой с ореолом по контуру.
+///
 /// [path] — path ногтя в координатах (0,0)-(size.width, size.height)
 /// [size] — размер ногтя
 void drawSocketGroove(Canvas canvas, Path path, Size size, SelectedDesign design) {
@@ -26,7 +30,7 @@ void drawSocketGroove(Canvas canvas, Path path, Size size, SelectedDesign design
   final baseStroke = size.width * widthParam * 0.09;
   final opacity = 0.15 + darkParam * 0.45;
 
-    // Приоритет: кастомный цвет с фото > выбранный тон
+  // Приоритет: кастомный цвет с фото > выбранный тон
   final tone = design.cuticleColor ?? CuticleTones.values[design.cuticleTone.clamp(0, 3)];
   final hsl = HSLColor.fromColor(tone);
 
@@ -43,8 +47,10 @@ void drawSocketGroove(Canvas canvas, Path path, Size size, SelectedDesign design
       .withSaturation((hsl.saturation * 1.1).clamp(0.0, 1.0))
       .toColor();
 
-  final center = Offset(size.width / 2, size.height * 0.85);
-  final radius = size.height * (0.35 + 0.65 * lengthParam);
+  // Центр бороздки — у кутикулы (низ ногтя). Радиус НАМНОГО плотнее,
+  // чем раньше: эффект гаснет уже к середине ногтя и не достаёт до торца.
+  final center = Offset(size.width / 2, size.height * 0.98);
+  final radius = size.height * (0.22 + 0.40 * lengthParam);
 
   ui.Shader makeShader(Color color, double maxOp) {
     return ui.Gradient.radial(
@@ -55,11 +61,11 @@ void drawSocketGroove(Canvas canvas, Path path, Size size, SelectedDesign design
         color.withOpacity(maxOp),
         color.withOpacity(0),
       ],
-      [0.0, 0.55, 1.0],
+      [0.0, 0.45, 1.0],
     );
   }
 
-  // 1. Мягкий ореол (3 прохода)
+  // 1. Мягкий ореол у кутикулы (3 прохода)
   const passes = [
     [1.0, 1.0],
     [1.7, 0.45],
@@ -74,15 +80,15 @@ void drawSocketGroove(Canvas canvas, Path path, Size size, SelectedDesign design
     canvas.drawPath(path, paint);
   }
 
-  // 2. Светлый валик снаружи
+  // 2. Светлый валик снаружи — только у кутикулы, ослабленный
   final rimPaint = Paint()
     ..style = PaintingStyle.stroke
     ..strokeWidth = baseStroke + size.width * 0.10
     ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5)
-    ..shader = makeShader(rimLightColor, 0.28 + darkParam * 0.15);
+    ..shader = makeShader(rimLightColor, 0.20 + darkParam * 0.12);
   canvas.drawPath(path, rimPaint);
 
-  // 3. Тёмная щель у края ногтя
+  // 3. Тёмная щель у края ногтя — только у кутикулы
   final contactPaint = Paint()
     ..style = PaintingStyle.stroke
     ..strokeWidth = size.width * 0.035
@@ -90,20 +96,6 @@ void drawSocketGroove(Canvas canvas, Path path, Size size, SelectedDesign design
     ..shader = makeShader(contactColor, 0.25 + darkParam * 0.20);
   canvas.drawPath(path, contactPaint);
 
-  // Лёгкая бороздка сверху (при почти полной длине)
-  if (lengthParam > 0.85) {
-    final topPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = baseStroke
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5)
-      ..shader = ui.Gradient.linear(
-        Offset(0, 0),
-        Offset(0, size.height * 0.15),
-        [
-          grooveColor.withOpacity(opacity * 0.35),
-          grooveColor.withOpacity(0),
-        ],
-      );
-    canvas.drawPath(path, topPaint);
-  }
+  // Бороздка сверху (у свободного края) НЕ рисуется:
+  // там ноготь не контактирует с кожей.
 }

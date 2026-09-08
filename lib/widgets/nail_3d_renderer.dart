@@ -30,7 +30,7 @@ class Nail3DRenderer extends StatelessWidget {
       height: height,
       child: Stack(
         children: [
-          // Тень по контуру ногтя (размытый силуэт формы, не прямоугольник!)
+          // Тень по контуру ногтя (амбиент + направленная)
           if (showNail && design.shadowIntensity > 0)
             Positioned.fill(
               child: CustomPaint(
@@ -71,15 +71,36 @@ class Nail3DRenderer extends StatelessWidget {
   }
 }
 
-/// Тень по контуру ногтя: размытый силуэт формы со смещением вниз
+/// Тень по контуру ногтя:
+/// 1) амбиент — тонкая размытая тень ВОКРУГ всего контура (ноготь
+///    «вдавлен» в палец, уходит эффект наклейки);
+/// 2) направленная — смещённый вниз силуэт (объём над кожей).
 class NailShadowPainter extends CustomPainter {
   final NailShape shape;
   final double intensity;
-  const NailShadowPainter({required this.shape, required this.intensity});
+  const NailShadowPainter({
+    required this.shape,
+    required this.intensity,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
     final path = buildNailPath(size.width, size.height, shape);
+
+    // 1) Амбиент-тень: stroke по контуру, половина внутрь (скроется
+    //    под ногтем), половина наружу = мягкий контактный ореол
+    canvas.save();
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3 + 5 * intensity
+        ..color = Colors.black.withOpacity(intensity * 0.22)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 3 + 4 * intensity),
+    );
+    canvas.restore();
+
+    // 2) Направленная тень снизу (как было)
     canvas.save();
     canvas.translate(0, 3 * intensity);
     canvas.drawPath(

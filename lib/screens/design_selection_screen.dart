@@ -5,14 +5,12 @@ import 'package:uuid/uuid.dart';
 import '../models/nail_color.dart';
 import '../models/nail_material.dart';
 import '../models/selected_design.dart';
-import '../models/nail_shape.dart';
 import '../models/nail_pattern.dart';
 import '../models/my_design.dart';
-import '../services/design_sets_service.dart';
 import '../services/database_service.dart';
+import '../library/unified_library_service.dart';
 import '../utils/responsive.dart';
-import '../utils/top_message.dart';
-import '../widgets/nail_pattern_layer.dart';
+import '../widgets/nail_3d_renderer.dart';
 import 'color_picker_screen.dart';
 import 'material_picker_screen.dart';
 import 'pattern_picker_screen.dart';
@@ -35,34 +33,21 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
   void initState() {
     super.initState();
     _design = widget.currentDesign;
-    _loadMyDesigns();
+    _myDesigns = DatabaseService.getMyDesigns();
+    // Прогреваем кэш единой библиотеки в фоне (не блокируем UI)
+    UnifiedLibraryService.getFullLibrary();
   }
 
-  void _loadMyDesigns() {
-    setState(() {
-      _myDesigns = DatabaseService.getMyDesigns();
-    });
-  }
+  /// Поиск цвета с поддержкой старых ID (классика + тренды) и новых
+  NailColor? _findColor(String? id) => UnifiedLibraryService.resolveColor(id);
 
-  NailColor? _findColor(String? id) {
-    if (id == null) return null;
-    for (final c in DesignSetsService.getColors()) {
-      if (c.id == id) return c;
-    }
-    return null;
-  }
-
-  NailMaterial? _findMaterial(String? id) {
-    if (id == null) return null;
-    for (final m in DesignSetsService.getMaterials()) {
-      if (m.id == id) return m;
-    }
-    return null;
-  }
+  /// Поиск материала с поддержкой старых и новых ID
+  NailMaterial? _findMaterial(String? id) =>
+      UnifiedLibraryService.resolveMaterial(id);
 
   void _applyMyDesign(MyDesign d) {
     setState(() {
-           if (d.isRecipe) {
+      if (d.isRecipe) {
         _design = SelectedDesign(
           color: _findColor(d.colorId),
           material: _findMaterial(d.materialId),
@@ -89,7 +74,6 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
         );
       }
     });
-    // success-снэкбар убран — не закрывает кнопки
   }
 
   Future<void> _deleteMyDesign(MyDesign d) async {
@@ -114,7 +98,9 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
 
     if (confirmed == true) {
       await DatabaseService.deleteMyDesign(d.id);
-      _loadMyDesigns();
+      setState(() {
+        _myDesigns = DatabaseService.getMyDesigns();
+      });
     }
   }
 
@@ -142,7 +128,8 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
     );
     if (source == null) return;
 
-    final XFile? photo = await _picker.pickImage(source: source, imageQuality: 90);
+    final XFile? photo =
+        await _picker.pickImage(source: source, imageQuality: 90);
     if (photo == null) return;
 
     final nameController = TextEditingController(text: 'Мой дизайн');
@@ -169,7 +156,8 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
     );
 
     if (ok == true && nameController.text.trim().isNotEmpty) {
-      final savedPath = await DatabaseService.savePhoto(File(photo.path), 'pattern');
+      final savedPath =
+          await DatabaseService.savePhoto(File(photo.path), 'pattern');
       await DatabaseService.addMyDesign(MyDesign(
         id: const Uuid().v4(),
         name: nameController.text.trim(),
@@ -177,7 +165,9 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
         imagePath: savedPath,
         createdAt: DateTime.now(),
       ));
-      _loadMyDesigns();
+      setState(() {
+        _myDesigns = DatabaseService.getMyDesigns();
+      });
     }
   }
 
@@ -486,38 +476,49 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
     );
   }
 
+  /// Превью рецепта — WYSIWYG: тот же Nail3DRenderer, что и в примерке.
   Widget _buildRecipePreview(MyDesign d) {
-    final color = _findColor(d.colorId)?.color ?? Colors.grey;
+    final color = _findColor(d.colorId);
     final material = _findMaterial(d.materialId);
 
-    return Stack(
-      children: [
-        Positioned.fill(child: Container(color: color)),
-        Positioned.fill(
-          child: NailPatternLayer(pattern: d.pattern),
-        ),
-        if (material?.hasGloss ?? false)
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.white.withOpacity((material?.glossIntensity ?? 0.5) * 0.30),
-                    Colors.transparent,
-                  ],
-                  stops: const [0.0, 0.5],
-                ),
-              ),
+    // Legacy-заглушка: цвет не найден
+    if (color == null) {
+      return Container(color: Colors.grey);
+    }
+
+    final design = SelectedDesign(
+      color: color,
+      material: material,
+      shape: d.shape,
+      density: d.density,
+      brightness: d.brightness,
+      pattern: d.pattern,
+      edgeDarken: d.edgeDarken,
+      highlightIntensity: d.highlightIntensity,
+      shadowIntensity: d.shadowIntensity,
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFFFAE9DD),
+                Color(0xFFF2D9C8),
+              ],
             ),
           ),
-        const Positioned(
-          top: 2,
-          right: 2,
-          child: Icon(Icons.bookmark, size: 14, color: Colors.white70),
-        ),
-      ],
+          child: Nail3DRenderer(
+            design: design,
+            width: constraints.maxWidth,
+            height: constraints.maxHeight,
+            showCuticle: false,
+          ),
+        );
+      },
     );
   }
 

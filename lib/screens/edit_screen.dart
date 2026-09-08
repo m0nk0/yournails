@@ -8,7 +8,8 @@ import '../models/nail_zone.dart';
 import '../models/selected_design.dart';
 import '../models/nail_shape.dart';
 import '../models/nail_pattern.dart';
-import '../widgets/home_app_bar.dart';
+import '../services/tryon_session_service.dart';
+import '../services/database_service.dart';
 import '../widgets/nail_3d_renderer.dart';
 import '../painters/realistic_nail_painter.dart';
 import '../painters/socket_groove.dart';
@@ -17,11 +18,16 @@ import '../utils/responsive.dart';
 import '../utils/top_message.dart';
 import 'result_screen.dart';
 import 'design_selection_screen.dart';
+import 'crm_screen.dart';
+import 'my_designs_screen.dart';
 
 class EditScreen extends StatefulWidget {
   final File imageFile;
 
-  const EditScreen({super.key, required this.imageFile});
+  /// Сессия для восстановления (если пользователь выбрал «Продолжить»)
+  final TryOnSession? restored;
+
+  const EditScreen({super.key, required this.imageFile, this.restored});
 
   @override
   State<EditScreen> createState() => _EditScreenState();
@@ -81,14 +87,113 @@ class _EditScreenState extends State<EditScreen> {
 
   bool _initialized = false;
 
+  // Путь к фото, скопированному в хранилище приложения (для сессии)
+  String? _sessionPhotoPath;
+
   bool get _hasDesign => _selectedDesign != null && _selectedDesign!.hasColor;
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreSession();
+    _prepareSessionPhoto();
+  }
+
+  /// Восстановление состояния из сессии
+  void _restoreSession() {
+    final s = widget.restored;
+    if (s == null) return;
+
+    final design = s.toDesign();
+
+    _frameCenter = Offset(s.frameCenterDx, s.frameCenterDy);
+    _frameWidth = s.frameWidth;
+    _frameHeight = s.frameHeight;
+    _rotation = s.rotation;
+    _imageOffset = Offset(s.imageOffsetDx, s.imageOffsetDy);
+    _imageScale = s.imageScale;
+
+    _shape = design.shape;
+    _density = design.density;
+    _brightness = design.brightness;
+    _pattern = design.pattern;
+    _edgeDarken = design.edgeDarken;
+    _highlightIntensity = design.highlightIntensity;
+    _shadowIntensity = design.shadowIntensity;
+    _cuticleWidth = design.cuticleWidth;
+    _cuticleDepth = design.cuticleDepth;
+    _cuticleLength = design.cuticleLength;
+    _cuticleTone = design.cuticleTone;
+    _cuticleColor = design.cuticleColor;
+
+    _selectedDesign = design;
+    _sessionPhotoPath = s.photoPath;
+  }
+
+  /// Копируем фото в хранилище приложения, чтобы сессия пережила
+  /// очистку временных файлов камеры/галереи
+  Future<void> _prepareSessionPhoto() async {
+    final path = widget.imageFile.path;
+    if (path.contains('/photos/') || path.contains('\\photos\\')) {
+      _sessionPhotoPath = path;
+      return;
+    }
+    try {
+      final saved = await DatabaseService.savePhoto(widget.imageFile, 'tryon');
+      if (mounted) {
+        setState(() {
+          _sessionPhotoPath = saved;
+        });
+      }
+    } catch (_) {
+      _sessionPhotoPath = path;
+    }
+  }
+
+  /// Сохранение снимка состояния в Hive
+  void _persistSession() {
+    final session = TryOnSession(
+      photoPath: _sessionPhotoPath ?? widget.imageFile.path,
+      frameCenterDx: _frameCenter.dx,
+      frameCenterDy: _frameCenter.dy,
+      frameWidth: _frameWidth,
+      frameHeight: _frameHeight,
+      rotation: _rotation,
+      imageOffsetDx: _imageOffset.dx,
+      imageOffsetDy: _imageOffset.dy,
+      imageScale: _imageScale,
+      colorId: _selectedDesign?.color?.id,
+      materialId: _selectedDesign?.material?.id,
+      shapeIndex: _shape.index,
+      density: _density,
+      brightness: _brightness,
+      patternTypeIndex: _pattern.type.index,
+      patternColorValue: _pattern.color.toARGB32(),
+      patternPath: _selectedDesign?.patternPath,
+      patternName: _selectedDesign?.patternName,
+      edgeDarken: _edgeDarken,
+      highlightIntensity: _highlightIntensity,
+      shadowIntensity: _shadowIntensity,
+      cuticleWidth: _cuticleWidth,
+      cuticleDepth: _cuticleDepth,
+      cuticleLength: _cuticleLength,
+      cuticleTone: _cuticleTone,
+      cuticleColorValue: _cuticleColor?.toARGB32(),
+      savedAt: DateTime.now(),
+    );
+    // fire-and-forget: сохранение не должно тормозить UI
+    unawaited(TryOnSessionService.save(session));
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_initialized) {
       final size = MediaQuery.of(context).size;
-      _frameCenter = Offset(size.width / 2, size.height / 2.5);
+      // Если сессия не восстановлена — центрируем рамку как раньше
+      if (widget.restored == null) {
+        _frameCenter = Offset(size.width / 2, size.height / 2.5);
+      }
       _initialized = true;
     }
     _decodePhoto();
@@ -119,6 +224,8 @@ class _EditScreenState extends State<EditScreen> {
 
   @override
   void dispose() {
+    // Сохраняем сессию при любом выходе с экрана
+    _persistSession();
     _photoImage?.dispose();
     super.dispose();
   }
@@ -150,15 +257,18 @@ class _EditScreenState extends State<EditScreen> {
     }
 
     // Пересчёт в координаты пикселя
-    final px = ((global.dx - rect.left) / rect.width * _photoImage!.width).round();
-    final py = ((global.dy - rect.top) / rect.height * _photoImage!.height).round();
+    final px =
+        ((global.dx - rect.left) / rect.width * _photoImage!.width).round();
+    final py =
+        ((global.dy - rect.top) / rect.height * _photoImage!.height).round();
 
     _readPixel(px, py);
   }
 
   Future<void> _readPixel(int px, int py) async {
     try {
-      final bytes = await _photoImage!.toByteData(format: ui.ImageByteFormat.rawRgba);
+      final bytes =
+          await _photoImage!.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (bytes == null) return;
 
       final w = _photoImage!.width;
@@ -225,7 +335,28 @@ class _EditScreenState extends State<EditScreen> {
         _cuticleTone = result.cuticleTone;
         _cuticleColor = result.cuticleColor;
       });
+      _persistSession();
     }
+  }
+
+  /// Быстрое меню: переходы БЕЗ потери состояния примерки
+  Future<void> _onMenuSelected(String value) async {
+    switch (value) {
+      case 'crm':
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const CrmScreen()),
+        );
+        break;
+      case 'designs':
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const MyDesignsScreen()),
+        );
+        break;
+    }
+    // Вернулись — примерка жива (осталась в стеке)
+    if (mounted) setState(() {});
   }
 
   void _saveAndNext() {
@@ -233,6 +364,8 @@ class _EditScreenState extends State<EditScreen> {
       TopMessage.show(context, 'Выберите дизайн', color: Colors.orange);
       return;
     }
+
+    _persistSession();
 
     final zone = NailZone(
       id: 'nail_1',
@@ -412,7 +545,7 @@ class _EditScreenState extends State<EditScreen> {
             onTap: onToggleVisible,
             child: Icon(
               visible ? Icons.visibility : Icons.visibility_off,
-              color: visible ? Colors.white : Colors.white38,
+              color: Colors.white,
               size: compact ? 20 : 26,
             ),
           ),
@@ -445,32 +578,68 @@ class _EditScreenState extends State<EditScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFE8E8E8),
-      appBar: const HomeAppBar(
-        title: Text('Настройка', style: TextStyle(fontSize: 22)),
+      appBar: AppBar(
+        title: const Text('Настройка', style: TextStyle(fontSize: 22)),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Colors.white,
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.menu),
+            tooltip: 'Быстрые переходы',
+            onSelected: _onMenuSelected,
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'crm',
+                child: Row(
+                  children: [
+                    Icon(Icons.people, size: 20),
+                    SizedBox(width: 8),
+                    Text('Клиенты'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'designs',
+                child: Row(
+                  children: [
+                    Icon(Icons.bookmarks, size: 20),
+                    SizedBox(width: 8),
+                    Text('Мои дизайны'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          IconButton(
+            icon: const Icon(Icons.home),
+            tooltip: 'На главный',
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
       ),
       body: Stack(
         children: [
-          // ФОН (фото) — с поддержкой пипетки и тапа
+          // 1) ФОН (фото) — с поддержкой пипетки и тапа
           Positioned.fill(
             child: GestureDetector(
               onScaleStart: _lockBg ? null : _onPhotoScaleStart,
               onScaleUpdate: _lockBg ? null : _onPhotoScaleUpdate,
               onTapUp: _pickingCuticle ? _onPhotoTap : null,
               child: Stack(
-  children: [
-    if (_showBgLayer)
-      Positioned.fill(
-        child: Transform.translate(
-          offset: _imageOffset,
-          child: Transform.scale(
-            scale: _imageScale,
-            child: Image.file(
-              widget.imageFile,
-              fit: BoxFit.contain,
-            ),
-          ),
-        ),
-      ),
+                children: [
+                  if (_showBgLayer)
+                    Positioned.fill(
+                      child: Transform.translate(
+                        offset: _imageOffset,
+                        child: Transform.scale(
+                          scale: _imageScale,
+                          child: Image.file(
+                            widget.imageFile,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      ),
+                    ),
 
                   // Подсветка режима пипетки
                   if (_pickingCuticle)
@@ -496,7 +665,9 @@ class _EditScreenState extends State<EditScreen> {
                                 Text(
                                   'Тапни по коже на фото',
                                   style: TextStyle(
-                                      color: Colors.white, fontSize: 14),
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                  ),
                                 ),
                                 SizedBox(width: 8),
                                 Icon(Icons.close,
@@ -512,6 +683,25 @@ class _EditScreenState extends State<EditScreen> {
             ),
           ),
 
+          // 2) НОГОТЬ — поверх фото, но ПОД служебными панелями
+          Positioned(
+            left: _frameCenter.dx - _frameWidth / 2,
+            top: _frameCenter.dy - _frameHeight / 2,
+            child: GestureDetector(
+              onPanUpdate: (details) {
+                if (_lockNail || _pickingCuticle) return;
+                setState(() {
+                  _frameCenter += details.delta;
+                });
+              },
+              child: Transform.rotate(
+                angle: _rotation * math.pi / 180,
+                child: _buildNailPreview(),
+              ),
+            ),
+          ),
+
+          // 3) ПОДСКАЗКА ЖЕСТОВ — поверх ногтя
           Positioned(
             top: 16,
             left: 0,
@@ -551,7 +741,7 @@ class _EditScreenState extends State<EditScreen> {
                   ),
           ),
 
-          // ПАНЕЛЬ СЛОЁВ
+          // 4) ПАНЕЛЬ СЛОЁВ — поверх ногтя и подсказки
           Positioned(
             top: 8,
             right: 8,
@@ -579,13 +769,18 @@ class _EditScreenState extends State<EditScreen> {
                             ),
                           ),
                         ),
-                        _layerRow('Ноготь', Icons.brush, _showNailLayer, _lockNail,
-                            () => setState(() => _showNailLayer = !_showNailLayer),
+                        _layerRow('Ноготь', Icons.brush, _showNailLayer,
+                            _lockNail,
+                            () =>
+                                setState(() => _showNailLayer = !_showNailLayer),
                             () => setState(() => _lockNail = !_lockNail)),
                         _layerRow('Рамка', Icons.border_outer, _showFrame, null,
-                            () => setState(() => _showFrame = !_showFrame), null),
-                        _layerRow('Кутикула', Icons.water_drop, _showCuticleLayer, null,
-                            () => setState(() => _showCuticleLayer = !_showCuticleLayer),
+                            () => setState(() => _showFrame = !_showFrame),
+                            null),
+                        _layerRow('Кутикула', Icons.water_drop,
+                            _showCuticleLayer, null,
+                            () => setState(
+                                () => _showCuticleLayer = !_showCuticleLayer),
                             null),
                         _layerRow('Фон', Icons.image, _showBgLayer, _lockBg,
                             () => setState(() => _showBgLayer = !_showBgLayer),
@@ -614,25 +809,7 @@ class _EditScreenState extends State<EditScreen> {
                   ),
           ),
 
-          // НОГОТЬ
-          Positioned(
-            left: _frameCenter.dx - _frameWidth / 2,
-            top: _frameCenter.dy - _frameHeight / 2,
-            child: GestureDetector(
-              onPanUpdate: (details) {
-                if (_lockNail || _pickingCuticle) return;
-                setState(() {
-                  _frameCenter += details.delta;
-                });
-              },
-              child: Transform.rotate(
-                angle: _rotation * math.pi / 180,
-                child: _buildNailPreview(),
-              ),
-            ),
-          ),
-
-          // ===== НИЖНЯЯ ПАНЕЛЬ =====
+          // 5) НИЖНЯЯ ПАНЕЛЬ — поверх всего
           Positioned(
             bottom: 0,
             left: 0,
@@ -806,7 +983,8 @@ class _EditScreenState extends State<EditScreen> {
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    ...List.generate(CuticleTones.values.length, (i) {
+                                    ...List.generate(CuticleTones.values.length,
+                                        (i) {
                                       final selected =
                                           _cuticleTone == i && _cuticleColor == null;
                                       return GestureDetector(
@@ -826,7 +1004,7 @@ class _EditScreenState extends State<EditScreen> {
                                               color: selected
                                                   ? Colors.white
                                                   : Colors.white24,
-                                              width: selected ? 3 : 1,
+                                              width: 3,
                                             ),
                                           ),
                                         ),
@@ -849,7 +1027,7 @@ class _EditScreenState extends State<EditScreen> {
                                           shape: BoxShape.circle,
                                           border: Border.all(
                                             color: _pickingCuticle
-                                                ? Colors.pink
+                                                ? Colors.white
                                                 : Colors.white38,
                                             width: 2,
                                           ),
@@ -892,7 +1070,9 @@ class _EditScreenState extends State<EditScreen> {
                                             color: Colors.white,
                                             size: 16,
                                             shadows: [
-                                              Shadow(color: Colors.black54, blurRadius: 2),
+                                              Shadow(
+                                                  color: Colors.black54,
+                                                  blurRadius: 2),
                                             ],
                                           ),
                                         ),
@@ -1002,7 +1182,7 @@ class _NailOutlinePainter extends CustomPainter {
   final Color color;
   final double strokeWidth;
   _NailOutlinePainter(
-      {required this.shape, required this.color, this.strokeWidth = 3});
+      {required this.shape, required this.color, required this.strokeWidth});
 
   @override
   void paint(Canvas canvas, Size size) {

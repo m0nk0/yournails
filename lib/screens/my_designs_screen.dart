@@ -6,9 +6,11 @@ import '../models/my_design.dart';
 import '../models/nail_color.dart';
 import '../models/nail_material.dart';
 import '../models/nail_shape.dart';
+import '../models/selected_design.dart';
 import '../services/database_service.dart';
-import '../services/design_sets_service.dart';
+import '../library/unified_library_service.dart';
 import '../widgets/home_app_bar.dart';
+import '../widgets/nail_3d_renderer.dart';
 
 /// Экран-витрина коллекции дизайнов мастера
 class MyDesignsScreen extends StatefulWidget {
@@ -26,6 +28,8 @@ class _MyDesignsScreenState extends State<MyDesignsScreen> {
   void initState() {
     super.initState();
     _loadDesigns();
+    // Прогреваем кэш единой библиотеки в фоне (не блокируем UI)
+    UnifiedLibraryService.getFullLibrary();
   }
 
   void _loadDesigns() {
@@ -34,21 +38,12 @@ class _MyDesignsScreenState extends State<MyDesignsScreen> {
     });
   }
 
-  NailColor? _findColor(String? id) {
-    if (id == null) return null;
-    for (final c in DesignSetsService.getColors()) {
-      if (c.id == id) return c;
-    }
-    return null;
-  }
+  /// Поиск цвета с поддержкой старых ID (классика + тренды) и новых
+  NailColor? _findColor(String? id) => UnifiedLibraryService.resolveColor(id);
 
-  NailMaterial? _findMaterial(String? id) {
-    if (id == null) return null;
-    for (final m in DesignSetsService.getMaterials()) {
-      if (m.id == id) return m;
-    }
-    return null;
-  }
+  /// Поиск материала с поддержкой старых и новых ID
+  NailMaterial? _findMaterial(String? id) =>
+      UnifiedLibraryService.resolveMaterial(id);
 
   /// Загрузить PNG/фото
   Future<void> _uploadImage() async {
@@ -207,24 +202,46 @@ class _MyDesignsScreenState extends State<MyDesignsScreen> {
     );
   }
 
-  /// Превью рецепта — ноготь на светлой коже с тонкой рамкой
+  /// Превью рецепта — WYSIWYG: тот же Nail3DRenderer, что и в примерке,
+  /// на подложке «кожа». Цвет, яркость, укрывистость и глянец — как в жизни.
   Widget _buildRecipePreview(MyDesign d) {
-    final color = _findColor(d.colorId)?.color ?? Colors.grey;
+    final color = _findColor(d.colorId);
     final material = _findMaterial(d.materialId);
+
+    // Legacy-заглушка: цвет не найден
+    if (color == null) {
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.grey,
+          borderRadius: BorderRadius.circular(12),
+        ),
+      );
+    }
+
+    final design = SelectedDesign(
+      color: color,
+      material: material,
+      shape: d.shape,
+      density: d.density,
+      brightness: d.brightness,
+      pattern: d.pattern,
+      edgeDarken: d.edgeDarken,
+      highlightIntensity: d.highlightIntensity,
+      shadowIntensity: d.shadowIntensity,
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final w = constraints.maxWidth;
         final h = constraints.maxHeight;
 
-        // ИСПРАВЛЕНО: ноготь шире (пропорция ~0.72 как у настоящего)
+        // Ноготь шире (пропорция ~0.72 как у настоящего)
         final nailW = w * 0.72;
         final nailH = h * 0.78;
-        final radius = NailShapeHelper.getBorderRadius(d.shape, nailW, nailH);
 
         return Container(
           decoration: BoxDecoration(
-            // ИСПРАВЛЕНО: бледная кожа
+            // Бледная кожа
             gradient: const LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
@@ -236,42 +253,15 @@ class _MyDesignsScreenState extends State<MyDesignsScreen> {
             borderRadius: BorderRadius.circular(12),
           ),
           child: Center(
-            child: Container(
+            child: SizedBox(
               width: nailW,
               height: nailH,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: radius,
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.9),
-                  width: 2,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.12),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+              child: Nail3DRenderer(
+                design: design,
+                width: nailW,
+                height: nailH,
+                showCuticle: false,
               ),
-              child: (material?.hasGloss ?? false)
-                  ? ClipRRect(
-                      borderRadius: radius,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.white.withOpacity(material!.glossIntensity * 0.30),
-                              Colors.transparent,
-                            ],
-                            stops: const [0.0, 0.5],
-                          ),
-                        ),
-                      ),
-                    )
-                  : null,
             ),
           ),
         );

@@ -46,7 +46,7 @@ class RealisticNailPainter extends CustomPainter {
       Paint()..color = render.color.withOpacity(render.opacity),
     );
 
-    // Слой 2: C-изгиб
+    // Слой 2: C-изгиб (затемнение боков)
     if (design.edgeDarken > 0) {
       final cEdge = Paint()
         ..shader = ui.Gradient.linear(
@@ -83,32 +83,87 @@ class RealisticNailPainter extends CustomPainter {
       NailPatternPainter(design.pattern).paint(canvas, size);
     }
 
-    // Слой 5: блик
-    if (design.highlightIntensity > 0) {
-      final highlight = Paint()
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8)
+    // ============ СЛОЙ 5: ЖИВОЙ БЛИК (как на фото мастеров) ============
+    final i = design.highlightIntensity;
+    if (i > 0) {
+      // Глянец материала управляет бликом: матовый почти не сияет
+      final gloss =
+          material?.hasGloss == true ? material!.glossIntensity : 0.5;
+      final shine = (0.35 + 0.65 * gloss).clamp(0.0, 1.0);
+
+      // Светлота цвета: на тёмных лаках блик меньше и резче,
+      // на светлых — шире и мягче
+      final lum = render.color.computeLuminance().clamp(0.0, 1.0);
+
+      // (a) Широкая мягкая световая полоса вдоль ногтя, слегка наклонная —
+      //     отражение C-изгиба (вместо прежней колонны по центру)
+      canvas.save();
+      canvas.translate(w * 0.5, h * 0.45);
+      canvas.rotate(-0.16);
+      final sheen = Paint()
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6)
         ..shader = ui.Gradient.linear(
-          Offset(0, h / 2),
-          Offset(w, h / 2),
+          Offset(-w * 0.6, 0),
+          Offset(w * 0.6, 0),
           [
             Colors.transparent,
-            Colors.white.withOpacity(design.highlightIntensity * 0.4),
+            Colors.white.withOpacity(0.05 * i * shine),
+            Colors.white.withOpacity(0.16 * i * shine),
+            Colors.white.withOpacity(0.04 * i * shine),
             Colors.transparent,
           ],
-          [0.3, 0.5, 0.7],
+          [0.0, 0.28, 0.40, 0.58, 1.0],
         );
-      canvas.drawRect(Rect.fromLTWH(0, 0, w, h), highlight);
+      canvas.drawRect(Rect.fromLTRB(-w, -h, w, h), sheen);
+      canvas.restore();
+
+      // (b) Зеркальное пятно: яркое вытянутое пятно в верхней трети со
+      //     смещением влево — отражение лампы/окна.
+      //     Наклон и наклон ногтя дают разную посадку на разных примерках.
+      final specR = w * (0.10 + 0.08 * lum);
+      canvas.save();
+      canvas.translate(w * (0.38 - 0.06 * lum), h * 0.28);
+      canvas.rotate(-0.30);
+      canvas.scale(1.0, 2.1);
+      final spec = Paint()
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3)
+        ..shader = ui.Gradient.radial(
+          Offset.zero,
+          specR,
+          [
+            Colors.white.withOpacity(
+                (0.55 + 0.35 * (1.0 - lum)) * i * shine),
+            Colors.white.withOpacity(0.18 * i * shine),
+            Colors.transparent,
+          ],
+          [0.0, 0.45, 1.0],
+        );
+      canvas.drawCircle(Offset.zero, specR, spec);
+      canvas.restore();
+
+      // (c) Светлая кромка у торца ногтя — отражение свободного края
+      final rim = Paint()
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5)
+        ..shader = ui.Gradient.linear(
+          Offset(0, h),
+          Offset(0, h * 0.80),
+          [
+            Colors.white.withOpacity(0.22 * i * shine),
+            Colors.transparent,
+          ],
+        );
+      canvas.drawRect(Rect.fromLTWH(0, h * 0.78, w, h * 0.22), rim);
     }
 
-    // Слой 6: глянец
+    // Слой 6: общий глянец материала (мягкий сверху вниз)
     if (material?.hasGloss ?? false) {
       final gloss = Paint()
         ..shader = ui.Gradient.linear(
           Offset(w / 2, 0),
           Offset(w / 2, h),
           [
-            Colors.white.withOpacity(material!.glossIntensity * 0.28),
-            Colors.white.withOpacity(material.glossIntensity * 0.08),
+            Colors.white.withOpacity(material!.glossIntensity * 0.18),
+            Colors.white.withOpacity(material.glossIntensity * 0.06),
             Colors.transparent,
           ],
           [0.0, 0.3, 0.65],

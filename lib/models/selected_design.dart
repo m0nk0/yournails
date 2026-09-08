@@ -59,6 +59,23 @@ class SelectedDesign {
   bool get hasPattern => patternPath != null && patternPath!.isNotEmpty;
   bool get hasPatternDraw => !pattern.isNone;
 
+  /// Укрывистость слоёв лака: насколько плотно покрытие перекрывает ноготь.
+  /// 1 слой → 0.88, 2 слоя → 0.96, 3 слоя → 1.00 (промежуточные значения —
+  /// линейная интерполяция).
+  ///
+  /// РАНЬШЕ было 0.5 / 0.75 / 1.0 — при дефолтных 2 слоях четверть фото
+  /// просвечивала сквозь лак, из-за чего возникал эффект «полупрозрачной
+  /// пластины». Реальный гель-лак в 2 слоя укрывает ноготь почти полностью.
+  double get layerCoverage {
+    const double one = 0.88;
+    const double two = 0.96;
+    const double three = 1.0;
+    if (density <= 1.0) return one;
+    if (density <= 2.0) return one + (density - 1.0) * (two - one);
+    if (density <= 3.0) return two + (density - 2.0) * (three - two);
+    return three;
+  }
+
   SelectedDesign copyWith({
     NailColor? color,
     NailMaterial? material,
@@ -108,16 +125,28 @@ class SelectedDesign {
 
     final densityFactor = (0.5 + (density - 1.0) * 0.25).clamp(0.5, 1.0);
 
-    final saturation =
+    // Коэффициент влияния материала и плотности на насыщенность (0..1)
+    final saturationFactor =
         ((material?.saturation ?? 1.0) * (0.6 + densityFactor * 0.4)).clamp(0.0, 1.0);
 
     final hsl = HSLColor.fromColor(color!.color);
+
+    // Насыщенность изменяется ОТНОСИТЕЛЬНО исходной (множитель), а не
+    // выставляется абсолютно: иначе серые цвета (насыщенность 0, hue = 0)
+    // превращались в бордовый.
+    final targetSaturation =
+        (hsl.saturation * saturationFactor).clamp(0.0, 1.0);
+
     final adjustedColor = hsl
-        .withSaturation(saturation)
+        .withSaturation(targetSaturation)
         .withLightness((hsl.lightness * brightness).clamp(0.0, 1.0))
         .toColor();
 
-    final opacity = ((material?.opacity ?? 1.0) * densityFactor).clamp(0.15, 1.0);
+    // Прозрачность = прозрачность материала × укрывистость слоёв.
+    // Шейер-материалы (биогель и т.п.) остаются полупрозрачными,
+    // плотные материалы при 2–3 слоях укрывают ноготь почти полностью.
+    final opacity =
+        ((material?.opacity ?? 1.0) * layerCoverage).clamp(0.15, 1.0);
 
     return DesignRender(color: adjustedColor, opacity: opacity);
   }

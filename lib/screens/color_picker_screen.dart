@@ -74,7 +74,6 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
       for (final g in _canonicalOrder)
         if (available.contains(g)) g
     ];
-    // Группы вне канона (например, появятся в Этапе 3)
     for (final g in available) {
       if (g != 'my' && !ordered.contains(g)) ordered.add(g);
     }
@@ -105,15 +104,16 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
     return _allColors.where((c) => c.group == groupId).toList();
   }
 
+  /// Открыть миксер. ВАЖНО: никаких await между получением результата
+  /// и Navigator.pop — цвет должен вернуться назад гарантированно.
+  /// Список «Мои цвета» перечитается сам при следующем открытии пикера.
   Future<void> _openMixer() async {
     final res = await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ColorMixerScreen()),
     );
     if (res != null && res is NailColor) {
-      // Миксер мог сохранить цвет в «Мои цвета» — сбрасываем кэш и перечитываем
       UnifiedLibraryService.invalidateCache();
-      await _load();
       if (mounted) Navigator.pop(context, res);
     }
   }

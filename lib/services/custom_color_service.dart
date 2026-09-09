@@ -4,8 +4,7 @@ import '../models/nail_color.dart';
 import '../library/unified_library_service.dart';
 
 /// «Мои цвета» — прокси к Единой Библиотеке.
-/// Все операции автоматически сбрасывают кэш библиотеки, чтобы
-/// все экраны сразу видели изменения.
+/// Все операции автоматически сбрасывают кэш библиотеки.
 class CustomColorService {
   /// Загрузить все свои цвета
   static Future<List<NailColor>> load() async {
@@ -13,9 +12,17 @@ class CustomColorService {
     return all.where((c) => c.group == 'my').toList();
   }
 
-  /// Добавить новый цвет + сброс кэша
-  static Future<List<NailColor>> add(String name, Color color) =>
-      UnifiedLibraryService.addCustomColor(name, color);
+  /// Добавить новый цвет (+ рецепт в description) + сброс кэша
+  static Future<List<NailColor>> add(
+    String name,
+    Color color, {
+    String? description,
+  }) =>
+      UnifiedLibraryService.addCustomColor(
+        name,
+        color,
+        description: description,
+      );
 
   /// Удалить цвет по id + сброс кэша
   static Future<List<NailColor>> delete(String id) =>

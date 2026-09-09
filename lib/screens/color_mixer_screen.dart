@@ -53,9 +53,8 @@ class _ColorMixerScreenState extends State<ColorMixerScreen> {
     return m;
   }
 
-  /// Человекочитаемое имя по умолчанию: состав + корректировки.
-  /// Пример: «Классический красный + Слоновая кость · белила 30%»
-  String _defaultName() {
+  /// Полный рецепт — идёт в description и во временное имя применения
+  String _recipeName() {
     if (_colorA == null || _colorB == null) return 'Мой цвет';
     final base = '${_colorA!.name} + ${_colorB!.name}';
     final mods = <String>[];
@@ -67,7 +66,22 @@ class _ColorMixerScreenState extends State<ColorMixerScreen> {
     return mods.isEmpty ? base : '$base · ${mods.join(', ')}';
   }
 
-  /// Уникальное имя: если занято в «Моих цветах» — добавляем №2, №3…
+  /// Короткое имя для сохранения: «Микс №N» со сквозной нумерацией
+  Future<String> _nextMixName() async {
+    final all = await UnifiedLibraryService.getAllColors();
+    final re = RegExp(r'^Микс №(\d+)$');
+    int max = 0;
+    for (final c in all.where((c) => c.group == 'my')) {
+      final m = re.firstMatch(c.name);
+      if (m != null) {
+        final n = int.parse(m.group(1)!);
+        if (n > max) max = n;
+      }
+    }
+    return 'Микс №${max + 1}';
+  }
+
+  /// Уникальное имя для введённого вручную: при совпадении — №2, №3…
   Future<String> _uniqueName(String base) async {
     final all = await UnifiedLibraryService.getAllColors();
     final taken = <String>{
@@ -100,9 +114,14 @@ class _ColorMixerScreenState extends State<ColorMixerScreen> {
   Future<void> _saveToMyColors() async {
     if (_colorA == null || _colorB == null) return;
     final entered = _nameController.text.trim();
-    final name =
-        await _uniqueName(entered.isEmpty ? _defaultName() : entered);
-    await CustomColorService.add(name, _mixed);
+    final name = entered.isNotEmpty
+        ? await _uniqueName(entered)
+        : await _nextMixName();
+    await CustomColorService.add(
+      name,
+      _mixed,
+      description: _recipeName(),
+    );
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -116,7 +135,8 @@ class _ColorMixerScreenState extends State<ColorMixerScreen> {
   void _apply() {
     if (_colorA == null || _colorB == null) return;
     final entered = _nameController.text.trim();
-    final name = entered.isEmpty ? _defaultName() : entered;
+    // Временное имя: своё или полный рецепт (в саммари читается хорошо)
+    final name = entered.isNotEmpty ? entered : _recipeName();
     Navigator.pop(
       context,
       NailColor(
@@ -124,6 +144,7 @@ class _ColorMixerScreenState extends State<ColorMixerScreen> {
         name: name,
         color: _mixed,
         group: 'my',
+        description: _recipeName(),
       ),
     );
   }
@@ -212,12 +233,12 @@ class _ColorMixerScreenState extends State<ColorMixerScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Название (по умолчанию генерируется из состава)
+                // Название: пусто = «Микс №N» при сохранении
                 TextField(
                   controller: _nameController,
                   decoration: InputDecoration(
                     labelText: 'Название (необязательно)',
-                    hintText: _defaultName(),
+                    hintText: 'Микс №… · рецепт: ${_recipeName()}',
                   ),
                 ),
                 const SizedBox(height: 16),

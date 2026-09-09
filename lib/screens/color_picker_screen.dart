@@ -104,9 +104,7 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
     return _allColors.where((c) => c.group == groupId).toList();
   }
 
-  /// Открыть миксер. ВАЖНО: никаких await между получением результата
-  /// и Navigator.pop — цвет должен вернуться назад гарантированно.
-  /// Список «Мои цвета» перечитается сам при следующем открытии пикера.
+  /// Открыть миксер. Никаких await между получением результата и pop.
   Future<void> _openMixer() async {
     final res = await Navigator.push(
       context,
@@ -140,6 +138,102 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
     if (confirmed == true) {
       await UnifiedLibraryService.deleteCustomColor(color.id);
       await _load();
+    }
+  }
+
+  /// HEX-код цвета для карточки
+  String _hexOf(Color c) {
+    return '#${c.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+  }
+
+  /// Карточка цвета: свотч, полное имя, группа, HEX, рецепт.
+  /// Открывается тапом по полоске с именем в сетке.
+  Future<void> _showColorCard(NailColor color) async {
+    final isCustom = color.group == 'my';
+    final action = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          color.name,
+          style: const TextStyle(fontSize: 20),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              height: 90,
+              decoration: BoxDecoration(
+                color: color.color,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey[300]!),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Группа',
+                    style: TextStyle(fontSize: 15, color: Colors.grey[600])),
+                Text(_groupName(color.group),
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Код',
+                    style: TextStyle(fontSize: 15, color: Colors.grey[600])),
+                Text(_hexOf(color.color),
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            if (color.description != null) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  color.description!,
+                  style: TextStyle(fontSize: 14, color: Colors.grey[800]),
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          if (isCustom)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'delete'),
+              child: const Text('Удалить',
+                  style: TextStyle(color: Colors.red)),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'cancel'),
+            child: const Text('Закрыть'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, 'pick'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.pink,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Выбрать'),
+          ),
+        ],
+      ),
+    );
+
+    if (action == 'pick') {
+      if (mounted) Navigator.pop(context, color);
+    } else if (action == 'delete') {
+      await _deleteCustom(color);
     }
   }
 
@@ -426,7 +520,9 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
     );
   }
 
-  /// Сетка цветов (используется и в классике, и в палитрах)
+  /// Сетка цветов.
+  /// Тап по свотчу = выбрать. Тап по полоске с именем = карточка цвета.
+  /// Долгое нажатие = удалить (только свои).
   Widget _buildColorsGrid(List<NailColor> colors) {
     return GridView.builder(
       padding: const EdgeInsets.all(16),
@@ -472,22 +568,26 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
                         : null,
                   ),
                 ),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  color: Colors.white,
-                  child: Text(
-                    color.name,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: isSelected
-                          ? FontWeight.bold
-                          : FontWeight.normal,
-                      color: isSelected ? Colors.pink : Colors.black87,
+                // Полоска с именем: тап = карточка с подробностями
+                GestureDetector(
+                  onTap: () => _showColorCard(color),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    color: Colors.white,
+                    child: Text(
+                      color.name,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: isSelected
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                        color: isSelected ? Colors.pink : Colors.black87,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],

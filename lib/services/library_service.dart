@@ -84,16 +84,22 @@ class LibraryService {
               name: e['name'] as String,
               color: Color(e['value'] as int),
               group: 'my',
+              description: e['description'] as String?,
             ))
         .toList();
   }
 
-  static Future<List<NailColor>> addCustomColor(String name, Color color) async {
+  static Future<List<NailColor>> addCustomColor(
+    String name,
+    Color color, {
+    String? description,
+  }) async {
     await init();
     (_m!['colors'] as List).add({
       'id': 'custom_${DateTime.now().millisecondsSinceEpoch}',
       'name': name,
-      'value': color.value,
+      'value': color.toARGB32(),
+      'description': description,
       'createdAt': DateTime.now().toIso8601String(),
     });
     await _save();

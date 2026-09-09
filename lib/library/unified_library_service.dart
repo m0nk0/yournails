@@ -91,9 +91,17 @@ class UnifiedLibraryService {
 
   // ============ ОПЕРАЦИИ С ПОЛЬЗОВАТЕЛЬСКИМИ ДАННЫМИ ============
 
-  /// Добавить пользовательский цвет + сброс кэша.
-  static Future<List<NailColor>> addCustomColor(String name, Color color) async {
-    final result = await LibraryService.addCustomColor(name, color);
+  /// Добавить пользовательский цвет (+ рецепт в description) + сброс кэша.
+  static Future<List<NailColor>> addCustomColor(
+    String name,
+    Color color, {
+    String? description,
+  }) async {
+    final result = await LibraryService.addCustomColor(
+      name,
+      color,
+      description: description,
+    );
     invalidateCache();
     return result;
   }

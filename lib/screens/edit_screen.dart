@@ -11,6 +11,7 @@ import '../models/nail_pattern.dart';
 import '../services/tryon_session_service.dart';
 import '../services/database_service.dart';
 import '../widgets/nail_3d_renderer.dart';
+import '../widgets/quick_menu.dart';
 import '../painters/realistic_nail_painter.dart';
 import '../painters/socket_groove.dart';
 import '../painters/nail_path.dart';
@@ -18,8 +19,6 @@ import '../utils/responsive.dart';
 import '../utils/top_message.dart';
 import 'result_screen.dart';
 import 'design_selection_screen.dart';
-import 'crm_screen.dart';
-import 'my_designs_screen.dart';
 
 class EditScreen extends StatefulWidget {
   final File imageFile;
@@ -339,26 +338,6 @@ class _EditScreenState extends State<EditScreen> {
     }
   }
 
-  /// Быстрое меню: переходы БЕЗ потери состояния примерки
-  Future<void> _onMenuSelected(String value) async {
-    switch (value) {
-      case 'crm':
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const CrmScreen()),
-        );
-        break;
-      case 'designs':
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const MyDesignsScreen()),
-        );
-        break;
-    }
-    // Вернулись — примерка жива (осталась в стеке)
-    if (mounted) setState(() {});
-  }
-
   void _saveAndNext() {
     if (!_hasDesign) {
       TopMessage.show(context, 'Выберите дизайн', color: Colors.orange);
@@ -582,40 +561,9 @@ class _EditScreenState extends State<EditScreen> {
         title: const Text('Настройка', style: TextStyle(fontSize: 22)),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
-        actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.menu),
-            tooltip: 'Быстрые переходы',
-            onSelected: _onMenuSelected,
-            itemBuilder: (_) => const [
-              PopupMenuItem(
-                value: 'crm',
-                child: Row(
-                  children: [
-                    Icon(Icons.people, size: 20),
-                    SizedBox(width: 8),
-                    Text('Клиенты'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'designs',
-                child: Row(
-                  children: [
-                    Icon(Icons.bookmarks, size: 20),
-                    SizedBox(width: 8),
-                    Text('Мои дизайны'),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          IconButton(
-            icon: const Icon(Icons.home),
-            tooltip: 'На главный',
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ],
+        // Бургер-меню: Клиенты / Мои дизайны / На главный.
+        // Отдельная кнопка «домой» убрана — она внутри меню.
+        actions: const [QuickMenuButton()],
       ),
       body: Stack(
         children: [

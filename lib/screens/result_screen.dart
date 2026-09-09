@@ -16,11 +16,10 @@ import '../models/my_design.dart';
 import '../services/database_service.dart';
 import '../utils/responsive.dart';
 import '../utils/top_message.dart';
-import '../widgets/home_app_bar.dart';
-import '../widgets/nail_pattern_layer.dart';
+import '../widgets/quick_menu.dart';
 import '../widgets/nail_3d_renderer.dart';
 import '../painters/nail_path.dart';
-import '../painters/socket_groove.dart';
+import '../painters/realistic_nail_painter.dart';
 
 class ResultScreen extends StatefulWidget {
   final File imageFile;
@@ -48,7 +47,9 @@ class _ResultScreenState extends State<ResultScreen> {
   NailZone get zone => widget.zone;
   SelectedDesign get design => widget.design;
 
-  /// Детерминированный рендер через Canvas (с 3D-эффектами)
+  /// Детерминированный рендер через Canvas.
+  /// Ноготь рисуется ТЕМ ЖЕ RealisticNailPainter, что и на экране, —
+  /// сохранённая картинка совпадает с тем, что видит мастер (WYSIWYG).
   Future<Uint8List> _renderTryOnImage({bool withDesign = true}) async {
     final mq = MediaQuery.of(context);
     final double W = mq.size.width;
@@ -81,157 +82,43 @@ class _ResultScreenState extends State<ResultScreen> {
     );
 
     if (withDesign) {
-      final render = design.getRender();
-      final material = design.material;
-
       canvas.save();
       canvas.translate(zone.x, zone.y);
       canvas.rotate(zone.rotation * math.pi / 180);
+      canvas.translate(-zone.width / 2, -zone.height / 2);
+      final nailSize = Size(zone.width, zone.height);
 
-      final rect = Rect.fromLTWH(
-        -zone.width / 2,
-        -zone.height / 2,
-        zone.width,
-        zone.height,
-      );
-      final rrect = NailShapeHelper.getBorderRadius(
-              design.shape, zone.width, zone.height)
-          .toRRect(rect);
-
-      // === ЛУНКА (бороздка вокруг ногтя, до clip) ===
-      if (design.cuticleWidth > 0.02) {
-        canvas.save();
-        canvas.translate(-zone.width / 2, -zone.height / 2);
-        final nailPath =
-            buildNailPath(zone.width, zone.height, design.shape);
-        drawSocketGroove(
-            canvas, nailPath, Size(zone.width, zone.height), design);
-        canvas.restore();
-      }
-
-      // Тень под ногтем
+      // Контактная тень (как на экране)
       if (design.shadowIntensity > 0) {
-        final shadowPaint = Paint()
-          ..color = Colors.black.withOpacity(design.shadowIntensity * 0.5)
-          ..maskFilter = MaskFilter.blur(
-              BlurStyle.normal, 6 * design.shadowIntensity);
-        canvas.save();
-        canvas.translate(0, 4 * design.shadowIntensity);
-        canvas.drawRRect(rrect, shadowPaint);
-        canvas.restore();
+        NailShadowPainter(
+          shape: design.shape,
+          intensity: design.shadowIntensity,
+        ).paint(canvas, nailSize);
       }
 
-      canvas.clipRRect(rrect);
+      // Ноготь со всеми 3D-слоями: купол, арка, свечение, блик, глянец,
+      // бороздка кутикулы — ровно тот же painter, что и в превью
+      RealisticNailPainter(
+        design: design,
+        width: zone.width,
+        height: zone.height,
+      ).paint(canvas, nailSize);
 
-      // Слой 1: цвет
-      canvas.drawRect(
-        rect,
-        Paint()..color = render.color.withOpacity(render.opacity),
-      );
-
-      // Слой 2: радиальный объём
-      if (design.edgeDarken > 0) {
-        final edgePaint = Paint()
-          ..shader = RadialGradient(
-            center: Alignment.center,
-            radius: 0.8,
-            colors: [
-              Colors.transparent,
-              Colors.black.withOpacity(design.edgeDarken * 0.4),
-            ],
-            stops: const [0.5, 1.0],
-          ).createShader(rect);
-        canvas.drawRect(rect, edgePaint);
-      }
-
-      // Слой 3: рисунок
-      if (design.hasPatternDraw) {
-        canvas.save();
-        canvas.translate(rect.left, rect.top);
-        NailPatternPainter(design.pattern)
-            .paint(canvas, Size(zone.width, zone.height));
-        canvas.restore();
-      }
-
-      // Слой 4: PNG-картинка
-      if (design.hasPattern) {
+      // PNG-узор поверх, обрезанный по форме ногтя
+      if (design.hasPattern && design.patternPath != null) {
         final pBytes = await File(design.patternPath!).readAsBytes();
         final pCompleter = Completer<ui.Image>();
         ui.decodeImageFromList(pBytes, (i) => pCompleter.complete(i));
         final pImg = await pCompleter.future;
+        canvas.save();
+        canvas.clipPath(buildNailPath(zone.width, zone.height, design.shape));
         canvas.drawImageRect(
           pImg,
           Rect.fromLTWH(0, 0, pImg.width.toDouble(), pImg.height.toDouble()),
-          rect,
+          Rect.fromLTWH(0, 0, zone.width, zone.height),
           Paint(),
         );
-      }
-
-      // Слой 5: C-изгиб (боковые грани темнее)
-      if (design.edgeDarken > 0) {
-        final cPaint = Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-            colors: [
-              Colors.black.withOpacity(design.edgeDarken * 0.45),
-              Colors.transparent,
-              Colors.transparent,
-              Colors.black.withOpacity(design.edgeDarken * 0.45),
-            ],
-            stops: const [0.0, 0.25, 0.75, 1.0],
-          ).createShader(rect);
-        canvas.drawRect(rect, cPaint);
-      }
-
-      // Слой 6: световая колонна
-      if (design.highlightIntensity > 0) {
-        final lPaint = Paint()
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10)
-          ..shader = LinearGradient(
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-            colors: [
-              Colors.transparent,
-              Colors.white.withOpacity(design.highlightIntensity * 0.45),
-              Colors.transparent,
-            ],
-            stops: const [0.25, 0.5, 0.75],
-          ).createShader(rect);
-        canvas.drawRect(rect, lPaint);
-      }
-
-      // Слой 7: блик сверху-слева
-      if (design.highlightIntensity > 0) {
-        final hlPaint = Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.white.withOpacity(design.highlightIntensity * 0.4),
-              Colors.white.withOpacity(design.highlightIntensity * 0.1),
-              Colors.transparent,
-            ],
-            stops: const [0.0, 0.3, 0.7],
-          ).createShader(rect);
-        canvas.drawRect(rect, hlPaint);
-      }
-
-      // Слой 8: глянец материала
-      if (material?.hasGloss ?? false) {
-        final gi = material?.glossIntensity ?? 0.5;
-        final glossPaint = Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.white.withOpacity(gi * 0.30),
-              Colors.white.withOpacity(gi * 0.10),
-              Colors.transparent,
-            ],
-            stops: const [0.0, 0.3, 0.7],
-          ).createShader(rect);
-        canvas.drawRect(rect, glossPaint);
+        canvas.restore();
       }
 
       canvas.restore();
@@ -443,8 +330,13 @@ class _ResultScreenState extends State<ResultScreen> {
     final tablet = Responsive.isTablet(context);
 
     return Scaffold(
-      appBar: const HomeAppBar(
-        title: Text('Результат', style: TextStyle(fontSize: 22)),
+      appBar: AppBar(
+        title: const Text('Результат', style: TextStyle(fontSize: 22)),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Colors.white,
+        // Бургер-меню: Клиенты / Мои дизайны / На главный.
+        // Отдельная кнопка «домой» убрана — она внутри меню.
+        actions: const [QuickMenuButton()],
       ),
       body: Stack(
         children: [

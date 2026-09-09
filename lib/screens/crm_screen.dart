@@ -20,6 +20,7 @@ class CrmScreen extends StatefulWidget {
 class _CrmScreenState extends State<CrmScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tab;
+  int _lastTabIndex = 0;
 
   List<Client> _clients = [];
   List<NailSession> _allSessions = [];
@@ -29,13 +30,23 @@ class _CrmScreenState extends State<CrmScreen>
   void initState() {
     super.initState();
     _tab = TabController(length: 3, vsync: this);
+    _tab.addListener(_onTabChanged);
     _load();
   }
 
   @override
   void dispose() {
+    _tab.removeListener(_onTabChanged);
     _tab.dispose();
     super.dispose();
+  }
+
+  /// Перерисовка при смене вкладки (чтобы FAB показывался только на «Клиенты»)
+  void _onTabChanged() {
+    if (_tab.index != _lastTabIndex) {
+      _lastTabIndex = _tab.index;
+      if (mounted) setState(() {});
+    }
   }
 
   void _load() {
@@ -70,6 +81,115 @@ class _CrmScreenState extends State<CrmScreen>
 
   String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}.'
       '${d.month.toString().padLeft(2, '0')}.${d.year}';
+
+  // ============ СОЗДАНИЕ КЛИЕНТА ============
+
+  /// Диалог «Новый клиент»: имя обязательно, телефон опционален.
+  /// После сохранения сразу открываем карточку клиента.
+  Future<void> _addClient() async {
+    final nameController = TextEditingController();
+    final phoneController = TextEditingController();
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final nameOk = nameController.text.trim().isNotEmpty;
+
+          // Проверка дубликата телефона (подсказка, не блокировка)
+          final digits =
+              phoneController.text.replaceAll(RegExp(r'[^0-9]'), '');
+          String? duplicate;
+          if (digits.length >= 5) {
+            for (final c in _clients) {
+              final cd =
+                  (c.phone ?? '').replaceAll(RegExp(r'[^0-9]'), '');
+              if (cd.isNotEmpty && cd == digits) {
+                duplicate = 'Похоже, такой клиент уже есть: ${c.name}';
+                break;
+              }
+            }
+          }
+
+          return AlertDialog(
+            title: const Text('Новый клиент', style: TextStyle(fontSize: 20)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(labelText: 'Имя *'),
+                  style: const TextStyle(fontSize: 18),
+                  onChanged: (_) => setDialogState(() {}),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: phoneController,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Телефон',
+                    hintText: '+7 999 123-45-67',
+                  ),
+                  style: const TextStyle(fontSize: 18),
+                  onChanged: (_) => setDialogState(() {}),
+                ),
+                if (duplicate != null) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.warning_amber,
+                          color: Colors.orange, size: 20),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          duplicate!,
+                          style: const TextStyle(
+                              fontSize: 13, color: Colors.orange),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Отмена', style: TextStyle(fontSize: 16)),
+              ),
+              ElevatedButton(
+                onPressed:
+                    nameOk ? () => Navigator.pop(context, true) : null,
+                child: const Text('Сохранить', style: TextStyle(fontSize: 16)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (ok != true) return;
+
+    final name = nameController.text.trim();
+    final phone = phoneController.text.trim();
+
+    final newClient = await DatabaseService.addClient(
+      name: name,
+      phone: phone.isEmpty ? null : phone,
+    );
+    _load();
+
+    if (!mounted) return;
+    // Сразу открываем карточку: мастер может добавить фото «до» и заметки
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => ClientDetailScreen(client: newClient)),
+    );
+    _load();
+  }
 
   // ============ СВЯЗЬ ============
 
@@ -212,6 +332,16 @@ class _CrmScreenState extends State<CrmScreen>
           ),
         ],
       ),
+      // FAB только на вкладке «Клиенты»
+      floatingActionButton: _tab.index == 0
+          ? FloatingActionButton(
+              onPressed: _addClient,
+              backgroundColor: Colors.pink,
+              tooltip: 'Новый клиент',
+              child: const Icon(Icons.person_add_alt_1,
+                  color: Colors.white, size: 28),
+            )
+          : null,
     );
   }
 
@@ -250,9 +380,30 @@ class _CrmScreenState extends State<CrmScreen>
         ),
         Expanded(
           child: filtered.isEmpty
-              ? const Center(
-                  child: Text('Никого не нашли 😔',
-                      style: TextStyle(fontSize: 18, color: Colors.grey)))
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.people_outline,
+                          size: 80, color: Colors.grey[400]),
+                      const SizedBox(height: 12),
+                      Text(
+                        _clients.isEmpty
+                            ? 'Пока нет клиентов'
+                            : 'Никого не нашли 😔',
+                        style: const TextStyle(
+                            fontSize: 18, color: Colors.grey),
+                      ),
+                      if (_clients.isEmpty) ...[
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Нажмите + внизу, чтобы добавить первого',
+                          style: TextStyle(fontSize: 15, color: Colors.grey),
+                        ),
+                      ],
+                    ],
+                  ),
+                )
               : ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   itemCount: filtered.length,

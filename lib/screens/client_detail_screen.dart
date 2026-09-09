@@ -233,39 +233,78 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
 
     final ok = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Данные клиента', style: TextStyle(fontSize: 20)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(labelText: 'Имя *'),
-              style: const TextStyle(fontSize: 18),
-              autofocus: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          // Мягкая проверка дубликата телефона (сам клиент исключён)
+          final digits =
+              phoneController.text.replaceAll(RegExp(r'[^0-9]'), '');
+          String? duplicate;
+          if (digits.length >= 5) {
+            for (final c in DatabaseService.getClients()) {
+              if (c.id == _client.id) continue;
+              final cd =
+                  (c.phone ?? '').replaceAll(RegExp(r'[^0-9]'), '');
+              if (cd.isNotEmpty && cd == digits) {
+                duplicate = c.name;
+                break;
+              }
+            }
+          }
+
+          return AlertDialog(
+            title: const Text('Данные клиента', style: TextStyle(fontSize: 20)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(labelText: 'Имя *'),
+                  style: const TextStyle(fontSize: 18),
+                  autofocus: true,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: phoneController,
+                  decoration: const InputDecoration(
+                    labelText: 'Телефон',
+                    hintText: '+7 999 123-45-67',
+                  ),
+                  style: const TextStyle(fontSize: 18),
+                  keyboardType: TextInputType.phone,
+                  onChanged: (_) => setDialogState(() {}),
+                ),
+                if (duplicate != null) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.warning_amber,
+                          color: Colors.orange, size: 20),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Похоже, такой телефон уже есть у клиента: $duplicate',
+                          style: const TextStyle(
+                              fontSize: 13, color: Colors.orange),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: phoneController,
-              decoration: const InputDecoration(
-                labelText: 'Телефон',
-                hintText: '+7 999 123-45-67',
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Отмена', style: TextStyle(fontSize: 16)),
               ),
-              style: const TextStyle(fontSize: 18),
-              keyboardType: TextInputType.phone,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена', style: TextStyle(fontSize: 16)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Сохранить', style: TextStyle(fontSize: 16)),
-          ),
-        ],
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Сохранить', style: TextStyle(fontSize: 16)),
+              ),
+            ],
+          );
+        },
       ),
     );
 
@@ -279,6 +318,80 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
       await DatabaseService.updateClient(updated);
       _loadSessions();
       if (mounted) _snack('Данные клиента обновлены', Colors.green);
+    }
+  }
+
+  // ============ УДАЛЕНИЕ КЛИЕНТА ============
+
+  /// Осознанное удаление: только из карточки, с полным списком последствий
+  Future<void> _deleteClient() async {
+    final sessions = DatabaseService.getSessionsByClient(_client.id);
+    final photoCount = sessions.fold<int>(
+        0,
+        (sum, s) =>
+            sum +
+            [s.hasBefore, s.hasTryOn, s.hasAfter].where((b) => b).length);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Удалить клиента?', style: TextStyle(fontSize: 20)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '«${_client.name}» будет удалён(а) без возможности восстановления.',
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red[200]!),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Вместе с клиентом удалятся:',
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red[900])),
+                  const SizedBox(height: 6),
+                  Text('• визитов: ${sessions.length}',
+                      style: TextStyle(fontSize: 14, color: Colors.red[900])),
+                  Text('• фото: $photoCount',
+                      style: TextStyle(fontSize: 14, color: Colors.red[900])),
+                  Text('• заметки и история визитов',
+                      style: TextStyle(fontSize: 14, color: Colors.red[900])),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена', style: TextStyle(fontSize: 16)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Удалить', style: TextStyle(fontSize: 16)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await DatabaseService.deleteClient(_client.id);
+      if (mounted) Navigator.pop(context, true);
     }
   }
 
@@ -365,6 +478,9 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     await DatabaseService.updateSession(updated);
     _loadSessions();
     if (mounted) _snack('Фото "после" сохранено', Colors.green);
+
+    // Авто-предложение видео после сохранения фото "после"
+    await _suggestVideo(updated);
   }
 
   // ============ УДАЛЕНИЕ ФОТО ============
@@ -649,6 +765,49 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     }
   }
 
+  // ============ АВТО-ПРЕДЛОЖЕНИЕ ВИДЕО ============
+
+  /// Показывает диалог "Сделать видео?" после сохранения фото "после"
+  Future<void> _suggestVideo(NailSession session) async {
+    if (!mounted) return;
+
+    final shouldOpen = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.movie_filter, color: Colors.pink, size: 28),
+            const SizedBox(width: 8),
+            const Text('Сделать видео?', style: TextStyle(fontSize: 20)),
+          ],
+        ),
+        content: const Text(
+          'Фото "после" сохранено. Создать видео до/после для соцсетей?',
+          style: TextStyle(fontSize: 16),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Позже', style: TextStyle(fontSize: 16)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.movie_filter, size: 20),
+            label: const Text('Сделать', style: TextStyle(fontSize: 16)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.pink,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldOpen == true && mounted) {
+      _openAnimation(session);
+    }
+  }
+
   /// Диалог с 4 вариантами клипа (с превью фото)
   Future<List<String>?> _showVideoVariantDialog(NailSession session) async {
     final options = <Map<String, dynamic>>[];
@@ -816,6 +975,11 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
             icon: const Icon(Icons.chat_bubble_outline, size: 32),
             tooltip: 'Связаться',
             onPressed: _showContactDialog,
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, size: 32),
+            tooltip: 'Удалить клиента',
+            onPressed: _deleteClient,
           ),
         ],
       ),

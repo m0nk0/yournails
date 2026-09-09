@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../models/nail_color.dart';
-import '../services/custom_color_service.dart';
 import '../library/unified_library_service.dart';
 import 'color_picker_screen.dart';
 
@@ -117,7 +116,7 @@ class _ColorMixerScreenState extends State<ColorMixerScreen> {
     final name = entered.isNotEmpty
         ? await _uniqueName(entered)
         : await _nextMixName();
-    await CustomColorService.add(
+    await UnifiedLibraryService.addCustomColor(
       name,
       _mixed,
       description: _recipeName(),

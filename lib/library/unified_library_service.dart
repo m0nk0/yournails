@@ -4,10 +4,10 @@ import '../models/nail_color.dart';
 import '../models/nail_material.dart';
 import '../models/nail_pattern.dart';
 import '../services/library_service.dart';
-import '../services/design_sets_service.dart';
 import '../services/trend_palettes_service.dart';
 import 'builtin_library_service.dart';
 import 'design_library.dart';
+import 'legacy_catalog.dart';
 
 /// Единый сервис библиотеки.
 /// Объединяет встроенные данные (60 цветов, 5 материалов, 7 паттернов)
@@ -47,7 +47,7 @@ class UnifiedLibraryService {
 
   // ============ СИНХРОННЫЕ РЕЗОЛВЕРЫ ============
 
-  /// Найти цвет по ID: новая библиотека → старая классика → трендовые палитры.
+  /// Найти цвет по ID: новая библиотека → архив старых ID → тренды.
   static NailColor? resolveColor(String? id) {
     if (id == null) return null;
 
@@ -58,7 +58,7 @@ class UnifiedLibraryService {
       }
     }
 
-    for (final c in DesignSetsService.getColors()) {
+    for (final c in LegacyCatalog.colors) {
       if (c.id == id) return c;
     }
 
@@ -71,7 +71,7 @@ class UnifiedLibraryService {
     return null;
   }
 
-  /// Найти материал по ID: новая библиотека → старые материалы.
+  /// Найти материал по ID: новая библиотека → архив старых ID.
   static NailMaterial? resolveMaterial(String? id) {
     if (id == null) return null;
 
@@ -82,7 +82,7 @@ class UnifiedLibraryService {
       }
     }
 
-    for (final m in DesignSetsService.getMaterials()) {
+    for (final m in LegacyCatalog.materials) {
       if (m.id == id) return m;
     }
 

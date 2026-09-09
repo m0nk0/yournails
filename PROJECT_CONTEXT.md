@@ -46,6 +46,7 @@
 - Полноэкранный просмотр фото с жестами зума
 - Управление фото: удаление (с подтверждением) и замена из галереи
 - Автоудаление пустого визита (клиент остаётся)
+- CRM-данные: цена визита, название услуги (используются в статистике и напоминаниях)
 
 ### 5. Выравнивание «ПОСЛЕ» по призраку (AlignAfterScreen)
 - Выбор фото «после» ТОЛЬКО из галереи
@@ -57,20 +58,25 @@
 - В коллекцию: сохранение рецепта дизайна (цвет+материал+форма+3D+узор)
 - В галерею: сохранение PNG-рендера через пакет gal
 
-### 7. Видео до/после (AnimationScreen) — В РАЗРАБОТКЕ
+### 7. Видео до/после (AnimationScreen) — В РАЗРАБОТКЕ, ФАЗА 1 ЗАВЕРШЕНА
 - Автоматическая анимация из фото визита
-- 7 переходов: Блёстки, Круг, Вспышка, Шторка, Зум-панч, Слайд, Фейд
-- 4 шаблона: Чистый (480×640), Instagram (640×640), TikTok (480×854), Гламур (480×640 с искрами)
+- **7 переходов:** Блёстки, Круг, Вспышка, Шторка, Зум-панч, Слайд, Фейд
+- **5 трендовых шаблонов:** Слайдер, Вспышка, Обложка, **Reels** (вертикаль 1080×1920), **Кино** (16:9 с letterbox+grain)
+- **4 классических шаблона:** Чистый, Instagram, TikTok, Гламур
 - Ken Burns эффект (кадры «дышат»)
-- Только MP4 экспорт через flutter_quick_video_encoder (без GIF)
+- Только MP4 экспорт через `flutter_quick_video_encoder` (без GIF)
 - Сохранение в галерею + шеринг
+- **Отмена экспорта:** кнопка ✕ рядом с прогресс-баром, `cancelChecker` прерывает рендер между кадрами, временный файл удаляется
+- **Память последнего шаблона:** `last_video_template` в Hive settings, восстановление при следующем открытии
+- **Имена файлов:** `{ИмяКлиента}_{YYYY-MM-DD_HHmm}.mp4` (в галерее и шеринге читабельные имена вместо timestamp)
+- Мастер-бейдж (аватар + имя) в каждом шаблоне, адаптируется к размеру кадра
 
 ### 8. Единая Библиотека (Этап 1)
 - `LibraryManifest` — метаданные (версия схемы, счётчики, группы цветов, дата обновления)
 - `DesignLibrary` — агрегатор (цвета+материалы+паттерны) с fromJson/toJson и геттерами
 - `BuiltinLibraryService` — встроенные данные: цвета из типизированного Dart-списка, материалы/паттерны из JSON-строки
 - `UnifiedLibraryService` — единая точка доступа + кэш с `invalidateCache()`
-- **Миграция старых ID:** `resolveColor()/resolveMaterial()`: кэш → старый `DesignSetsService` → трендовые палитры
+- **Миграция старых ID:** `resolveColor()/resolveMaterial()`: кэш → `LegacyCatalog` → трендовые палитры
 - `NailColor.description` — рецепт/описание цвета (миксы)
 - Состав: 60 цветов (8 красных, 8 розовых, 8 нюд, 8 фиолетовых, 8 синих, 7 зелёных, 7 жёлтых, 6 тёмных), 5 материалов, 7 паттернов
 
@@ -92,11 +98,13 @@
 lib/
 ├── main.dart
 ├── constants/
+│   └── master_icons.dart
 ├── library/                          ← Единая Библиотека (Этап 1)
 │   ├── library_manifest.dart
 │   ├── design_library.dart
 │   ├── builtin_library_service.dart
 │   ├── unified_library_service.dart  ← + resolveColor/resolveMaterial + операции с кэшем
+│   ├── legacy_catalog.dart           ← архив старых цветов/материалов (до миграции БД)
 │   └── builtin/
 │       ├── builtin_colors.dart       ← 60 типизированных цветов
 │       └── default_library_data.dart ← JSON-строка: материалы + паттерны + манифест
@@ -107,19 +115,16 @@ lib/
 │   ├── nail_design.dart
 │   ├── nail_shape.dart
 │   ├── nail_zone.dart
-│   ├── nail_session.dart
+│   ├── nail_session.dart             ← CRM-данные: price, serviceName
 │   ├── selected_design.dart          ← getRender(): укрывистость слоёв + HSL-коррекции
 │   ├── my_design.dart
 │   ├── client.dart
 │   └── master.dart
 ├── services/
 │   ├── library_service.dart          ← library.json + description в цветах
-│   ├── custom_color_service.dart     ← прокси к UnifiedLibraryService
 │   ├── tryon_session_service.dart    ← сессия примерки (Hive box 'tryon_session')
-│   ├── database_service.dart
-│   ├── design_sets_service.dart      ← LEGACY: источник старых ID (до 2.5)
-│   ├── trend_palettes_service.dart   ← LEGACY: тренды (до Этапа 3)
-│   ├── design_catalog.dart           ← LEGACY: удалить на 2.5
+│   ├── database_service.dart         ← + lastVideoTemplate, settings box
+│   ├── trend_palettes_service.dart
 │   └── overlay_service.dart
 ├── painters/
 │   ├── realistic_nail_painter.dart   ← 3D-пакет
@@ -131,20 +136,19 @@ lib/
 │   ├── result_screen.dart
 │   ├── design_selection_screen.dart
 │   ├── my_designs_screen.dart
-│   ├── color_picker_screen.dart      ← Этап 2: динамические группы + карточка цвета
-│   ├── material_picker_screen.dart   ← Этап 2: UnifiedLibraryService + умная подсветка
-│   ├── color_mixer_screen.dart       ← Этап 2: Микс №N + description
+│   ├── color_picker_screen.dart      ← динамические группы + карточка цвета
+│   ├── material_picker_screen.dart   ← UnifiedLibraryService + умная подсветка
+│   ├── color_mixer_screen.dart       ← Микс №N + description
 │   ├── pattern_picker_screen.dart
 │   ├── client_detail_screen.dart
 │   ├── crm_screen.dart
 │   ├── align_after_screen.dart
-│   ├── animation_screen.dart         ← Этап 4
-│   └── ...
+│   └── animation_screen.dart         ← Фаза 1: отмена, память, имена, 5 трендов
 ├── widgets/
 │   ├── nail_3d_renderer.dart         ← + амбиент-тень контура
 │   ├── nail_pattern_layer.dart
-│   ├── home_app_bar.dart
-│   └── video_renderer.dart           ← Этап 4
+│   ├── video_renderer.dart           ← cancelChecker, 5 трендов, 4 классики
+│   └── home_app_bar.dart
 └── utils/
     ├── responsive.dart
     └── top_message.dart
@@ -169,9 +173,9 @@ lib/
 | 2.1b | `MyDesignsScreen` → WYSIWYG-превью через Nail3DRenderer | ✅ |
 | 2.2 | `ColorPickerScreen` → динамические группы + «Мои цвета» | ✅ |
 | 2.3 | `MaterialPickerScreen` → getAllMaterials() + умная подсветка | ✅ |
-| 2.4 | Миксер → LibraryService; CustomColorService как прокси с авто-инвалидацией | ✅ |
+| 2.4 | Миксер → LibraryService, CustomColorService как прокси с авто-инвалидацией | ✅ |
 | 2.4b | Микс №N + description-рецепт + карточка цвета по тапу на имя | ✅ |
-| 2.5 | Удаление LEGACY-сервисов (DesignCatalog и др.) | ⬜ косметика |
+| 2.5 | Чистка LEGACY: `LegacyCatalog` архивирует старые данные | ✅ |
 
 ### ✅ ВНЕЭТАПНО: Реализм и UX (ЗАВЕРШЕНО)
 | Блок | Статус |
@@ -183,6 +187,16 @@ lib/
 | 3D-пакет (купол/арка/блик/амбиент/бороздка) | ✅ |
 | Fix: применение цвета из миксера (pop без await) | ✅ |
 
+### 🔄 ЭТАП 4: Видео и контент (В РАБОТЕ)
+| Шаг | Описание | Статус |
+|-----|----------|--------|
+| 4.1a | Улучшения UX: отмена экспорта, память шаблона, имена файлов | ✅ |
+| 4.1b | Новые тренды: Reels (1080×1920) + Кино (letterbox+grain) | ✅ |
+| 4.2 | Авто-предложение видео при сохранении визита | ⬜ |
+| 4.3 | Кнопка «🎬 Видео» в карточке визита (один клик) | ⬜ |
+| 4.4 | Аутро-карточка с брендингом мастера | ⬜ |
+| 4.5 | Темп видео (Динамично/Спокойно) | ⬜ |
+
 ### 📋 ЭТАП 3: Расширение библиотеки (ПЛАНИРУЕТСЯ)
 | Шаг | Описание | Статус |
 |-----|----------|--------|
@@ -190,14 +204,6 @@ lib/
 | 3.2 | Пользовательские паттерны | ⬜ |
 | 3.3 | Импорт/экспорт библиотеки | ⬜ |
 | 3.4 | Категоризация дизайнов (коллекции) | ⬜ |
-
-### 📋 ЭТАП 4: Видео и контент (ПЛАНИРУЕТСЯ, аудит)
-| Шаг | Описание | Статус |
-|-----|----------|--------|
-| 4.0 | Аудит текущего состояния AnimationScreen/video_renderer | ⬜ |
-| 4.1 | Доработка AnimationScreen | ⬜ |
-| 4.2 | Новые переходы и эффекты | ⬜ |
-| 4.3 | Экспорт в соцсети | ⬜ |
 
 ---
 
@@ -244,7 +250,22 @@ UnifiedLibraryService.invalidateCache();
 ### Z-порядок в EditScreen (Stack)
 1. Фон → 2. Ноготь → 3. Подсказка жестов → 4. Панель слоёв → 5. Нижняя панель
 
+### Видео-рендер (VideoRenderer)
+- `renderVideo(..., cancelChecker)` — проверка отмены перед каждым кадром
+- Имена файлов: `{clientName}_{YYYY-MM-DD_HHmm}.mp4`, очистка спецсимволов
+- Хранение последнего шаблона: `DatabaseService.lastVideoTemplate`
+- Новые шаблоны:
+  - **Reels** (`VideoTemplate.reels`): 1080×1920, cover-кроп, жирный шрифт 72px, розовая рамка 12px, тёмная подложка под заголовок, все 7 переходов
+  - **Cinematic** (`VideoTemplate.cinematic`): 1920×1080, letterbox-полосы 140px сверху/снизу, зерно (grain intensity 10%), все 7 переходов, бейдж мастера приподнят над letterbox
+- Архитектура: `VideoRenderer.paintFrame` для превью через `AnimatedBuilder` + `renderVideo` для экспорта (общий painter `_paintFrame`)
+
 ---
 
 ## 🔗 Зависимости
-- `path_provider`, `hive` / `hive_flutter`, `gal`, `flutter_quick_video_encoder`, `image_picker`, `uuid`
+- `path_provider` — хранение JSON/фото пользовательских данных
+- `hive` / `hive_flutter` — БД клиентов, визитов, коллекции, сессии примерки, настройки
+- `gal` — сохранение изображений и видео в галерею
+- `flutter_quick_video_encoder` — кодирование MP4
+- `image_picker` — камера/галерея
+- `uuid` — идентификаторы
+- `share_plus` — шеринг файлов

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+
 import '../models/nail_color.dart';
-import '../services/design_sets_service.dart';
-import '../services/custom_color_service.dart';
+import '../library/unified_library_service.dart';
 import '../services/trend_palettes_service.dart';
 import 'color_mixer_screen.dart';
 
+/// Экран выбора цвета.
+/// Классика: вкладки групп из Единой Библиотеки (динамически) + «Мои цвета».
+/// Тренды: кураторские палитры (до Этапа 3 остаются из TrendPalettesService).
 class ColorPickerScreen extends StatefulWidget {
   final NailColor? selectedColor;
 
@@ -16,50 +19,89 @@ class ColorPickerScreen extends StatefulWidget {
 
 class _ColorPickerScreenState extends State<ColorPickerScreen>
     with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  final List<NailColor> _allColors = DesignSetsService.getColors();
-  List<NailColor> _customColors = [];
+  TabController? _tabController;
+  List<NailColor> _allColors = [];
+
+  /// ID вкладок в порядке: all → группы по канону → my
+  List<String> _tabs = [];
+  bool _loading = true;
 
   // Режим: false = классика (вкладки), true = тренды (палитры)
   bool _isTrendsMode = false;
 
-  // Группы + вкладка "Мои цвета"
-  final List<ColorGroup> _groups = const [
-    ColorGroup(id: 'all', name: 'Все', icon: '🎨'),
-    ColorGroup(id: 'red', name: 'Красные', icon: '🔴'),
-    ColorGroup(id: 'pink', name: 'Розовые', icon: '🌸'),
-    ColorGroup(id: 'nude', name: 'Нюд', icon: '🤍'),
-    ColorGroup(id: 'purple', name: 'Фиолет', icon: '🟣'),
-    ColorGroup(id: 'blue', name: 'Синие', icon: '🔵'),
-    ColorGroup(id: 'green', name: 'Зелёные', icon: '🟢'),
-    ColorGroup(id: 'yellow', name: 'Жёлтые', icon: '🟡'),
-    ColorGroup(id: 'dark', name: 'Тёмные', icon: '⚫'),
-    ColorGroup(id: 'my', name: 'Мои цвета', icon: '💾'),
+  static const List<String> _canonicalOrder = [
+    'Красные',
+    'Розовые',
+    'Нюд',
+    'Фиолетовые',
+    'Синие',
+    'Зелёные',
+    'Жёлтые',
+    'Тёмные',
   ];
+
+  static const Map<String, String> _groupIcons = {
+    'Красные': '🔴',
+    'Розовые': '🌸',
+    'Нюд': '🤍',
+    'Фиолетовые': '🟣',
+    'Синие': '🔵',
+    'Зелёные': '🟢',
+    'Жёлтые': '🟡',
+    'Тёмные': '⚫',
+    'my': '💾',
+  };
+
+  String _groupName(String id) {
+    if (id == 'all') return 'Все';
+    if (id == 'my') return 'Мои цвета';
+    return id;
+  }
+
+  String _groupIcon(String id) => _groupIcons[id] ?? '🎨';
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _groups.length, vsync: this);
-    _loadCustom();
+    _load();
   }
 
-  Future<void> _loadCustom() async {
-    final custom = await CustomColorService.load();
-    if (mounted) {
-      setState(() => _customColors = custom);
+  Future<void> _load() async {
+    final colors = await UnifiedLibraryService.getAllColors();
+
+    final available = colors.map((c) => c.group).toSet();
+    final ordered = <String>[
+      for (final g in _canonicalOrder)
+        if (available.contains(g)) g
+    ];
+    // Группы вне канона (например, появятся в Этапе 3)
+    for (final g in available) {
+      if (g != 'my' && !ordered.contains(g)) ordered.add(g);
     }
+    final tabs = <String>[
+      'all',
+      ...ordered,
+      if (available.contains('my')) 'my',
+    ];
+
+    _tabController?.dispose();
+    if (!mounted) return;
+    setState(() {
+      _allColors = colors;
+      _tabs = tabs;
+      _tabController = TabController(length: tabs.length, vsync: this);
+      _loading = false;
+    });
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _tabController?.dispose();
     super.dispose();
   }
 
   List<NailColor> _colorsForGroup(String groupId) {
-    if (groupId == 'all') return [..._allColors, ..._customColors];
-    if (groupId == 'my') return _customColors;
+    if (groupId == 'all') return _allColors;
     return _allColors.where((c) => c.group == groupId).toList();
   }
 
@@ -69,13 +111,36 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
       MaterialPageRoute(builder: (_) => const ColorMixerScreen()),
     );
     if (res != null && res is NailColor) {
+      // Миксер мог сохранить цвет в «Мои цвета» — сбрасываем кэш и перечитываем
+      UnifiedLibraryService.invalidateCache();
+      await _load();
       if (mounted) Navigator.pop(context, res);
     }
   }
 
   Future<void> _deleteCustom(NailColor color) async {
-    await CustomColorService.delete(color.id);
-    await _loadCustom();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Удалить цвет?', style: TextStyle(fontSize: 20)),
+        content: Text('"${color.name}" будет удалён из «Моих цветов».'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await UnifiedLibraryService.deleteCustomColor(color.id);
+      await _load();
+    }
   }
 
   /// Открыть палитру — показать её цвета на выбор
@@ -113,9 +178,9 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
           ),
           const SizedBox(width: 8),
         ],
-        bottom: _isTrendsMode
+        bottom: (_isTrendsMode || _loading || _tabController == null)
             ? const PreferredSize(
-                preferredSize: Size.fromHeight(48),
+                preferredSize: Size.fromHeight(8),
                 child: SizedBox(height: 8),
               )
             : TabBar(
@@ -129,15 +194,15 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
                 ),
-                tabs: _groups
+                tabs: _tabs
                     .map((g) => Tab(
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(g.icon,
+                              Text(_groupIcon(g),
                                   style: const TextStyle(fontSize: 16)),
                               const SizedBox(width: 4),
-                              Text(g.name),
+                              Text(_groupName(g)),
                             ],
                           ),
                         ))
@@ -169,7 +234,7 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text('🎨', style: TextStyle(fontSize: 16)),
+                          const Text('🎨', style: TextStyle(fontSize: 16)),
                           const SizedBox(width: 6),
                           Text(
                             'Классика',
@@ -204,7 +269,7 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text('🔥', style: TextStyle(fontSize: 16)),
+                          const Text('🔥', style: TextStyle(fontSize: 16)),
                           const SizedBox(width: 6),
                           Text(
                             'Тренды',
@@ -227,26 +292,30 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
 
           // === КОНТЕНТ ===
           Expanded(
-            child: _isTrendsMode ? _buildTrends() : _buildClassic(),
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _isTrendsMode
+                    ? _buildTrends()
+                    : _buildClassic(),
           ),
         ],
       ),
     );
   }
 
-  /// Режим «Классика» — вкладки + сетка цветов (как было)
+  /// Режим «Классика» — вкладки групп из Единой Библиотеки
   Widget _buildClassic() {
     return TabBarView(
       controller: _tabController,
-      children: _groups.map((g) {
-        final colors = _colorsForGroup(g.id);
+      children: _tabs.map((g) {
+        final colors = _colorsForGroup(g);
 
         if (colors.isEmpty) {
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(32),
               child: Text(
-                'Пока пусто.\nСмешайте цвет (иконка 🧪 сверху) и сохраните в "Мои цвета".',
+                'Пока пусто.\nСмешайте цвет (иконка 🧪 сверху) и сохраните в «Мои цвета».',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 16, color: Colors.grey[600]),
               ),
@@ -298,7 +367,6 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Номер и название
               Row(
                 children: [
                   Container(
@@ -334,7 +402,6 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 12),
-              // Веер цветов
               Expanded(
                 child: Row(
                   children: palette.colors.map((c) {

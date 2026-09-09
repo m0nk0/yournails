@@ -1,7 +1,10 @@
+import 'package:flutter/material.dart';
+
 import '../models/nail_color.dart';
 import '../models/nail_material.dart';
 import '../models/nail_pattern.dart';
 import '../services/library_service.dart';
+import '../services/custom_color_service.dart';
 import '../services/design_sets_service.dart';
 import '../services/trend_palettes_service.dart';
 import 'builtin_library_service.dart';
@@ -9,7 +12,10 @@ import 'design_library.dart';
 
 /// Единый сервис библиотеки.
 /// Объединяет встроенные данные (60 цветов, 5 материалов, 7 паттернов)
-/// с пользовательскими данными ("Мои цвета", свои материалы).
+/// с пользовательскими данными из ОБОИХ источников «Моих цветов»:
+///  - LibraryService (library.json) — основной источник
+///  - CustomColorService (custom_colors.json) — LEGACY-мост, пока миксер
+///    не переведён на LibraryService (шаг 2.4)
 class UnifiedLibraryService {
   static DesignLibrary? _unifiedLibrary;
 
@@ -23,20 +29,30 @@ class UnifiedLibraryService {
     // Загружаем встроенную библиотеку
     final builtin = await BuiltinLibraryService.getLibrary();
 
-    // Загружаем пользовательские данные
-    final customColors = await LibraryService.getCustomColors();
+    // Пользовательские цвета: основной источник + legacy-мост (без дублей)
+    final libraryCustom = await LibraryService.getCustomColors();
+    final seen = <String>{for (final c in libraryCustom) c.id};
+    final customColors = [...libraryCustom];
+    try {
+      final legacyCustom = await CustomColorService.load();
+      for (final c in legacyCustom) {
+        if (seen.contains(c.id)) continue;
+        customColors.add(NailColor(
+          id: c.id,
+          name: c.name,
+          color: c.color,
+          group: 'my',
+        ));
+      }
+    } catch (_) {}
+
     final customMaterials = await LibraryService.getCustomMaterials();
 
-    // Объединяем: встроенные цвета + пользовательские цвета
+    // Объединяем
     final allColors = [...builtin.colors, ...customColors];
-
-    // Объединяем: встроенные материалы + пользовательские материалы
     final allMaterials = [...builtin.materials, ...customMaterials];
-
-    // Паттерны пока только встроенные (пользовательские паттерны — задел на будущее)
     final allPatterns = [...builtin.patterns];
 
-    // Обновляем манифест с учётом объединения
     final unifiedManifest = builtin.manifest.copyWith(
       colorCount: allColors.length,
       materialCount: allMaterials.length,
@@ -56,11 +72,9 @@ class UnifiedLibraryService {
   // ============ СИНХРОННЫЕ РЕЗОЛВЕРЫ (с поддержкой старых ID) ============
 
   /// Найти цвет по ID: новая библиотека → старая классика → трендовые палитры.
-  /// Работает синхронно, если кэш уже прогрет (getFullLibrary вызывался ранее).
   static NailColor? resolveColor(String? id) {
     if (id == null) return null;
 
-    // 1. Новая единая библиотека (кэш)
     final cached = _unifiedLibrary?.colors;
     if (cached != null) {
       for (final c in cached) {
@@ -68,12 +82,10 @@ class UnifiedLibraryService {
       }
     }
 
-    // 2. Legacy: классические цвета старого сервиса
     for (final c in DesignSetsService.getColors()) {
       if (c.id == id) return c;
     }
 
-    // 3. Legacy: трендовые палитры
     for (final p in TrendPalettesService.getPalettes()) {
       for (final c in p.colors) {
         if (c.id == id) return c;
@@ -87,7 +99,6 @@ class UnifiedLibraryService {
   static NailMaterial? resolveMaterial(String? id) {
     if (id == null) return null;
 
-    // 1. Новая единая библиотека (кэш)
     final cached = _unifiedLibrary?.materials;
     if (cached != null) {
       for (final m in cached) {
@@ -95,12 +106,29 @@ class UnifiedLibraryService {
       }
     }
 
-    // 2. Legacy: материалы старого сервиса
     for (final m in DesignSetsService.getMaterials()) {
       if (m.id == id) return m;
     }
 
     return null;
+  }
+
+  // ============ ОПЕРАЦИИ С ПОЛЬЗОВАТЕЛЬСКИМИ ДАННЫМИ ============
+
+  /// Удалить пользовательский цвет из любого источника + сброс кэша
+  static Future<void> deleteCustomColor(String id) async {
+    await LibraryService.deleteCustomColor(id);
+    try {
+      await CustomColorService.delete(id);
+    } catch (_) {}
+    invalidateCache();
+  }
+
+  /// Добавить пользовательский цвет (основной источник) + сброс кэша.
+  /// На шаге 2.4 миксер будет вызывать именно этот метод.
+  static Future<void> addCustomColor(String name, Color color) async {
+    await LibraryService.addCustomColor(name, color);
+    invalidateCache();
   }
 
   // ============ АСИНХРОННЫЙ API ============
@@ -135,7 +163,7 @@ class UnifiedLibraryService {
     return library.getAvailableColorGroups();
   }
 
-  /// Найти цвет по ID (ищет и во встроенных, и в пользовательских, и в legacy)
+  /// Найти цвет по ID (ищет во встроенных, пользовательских и legacy)
   static Future<NailColor?> findColorById(String id) async {
     await getFullLibrary();
     return resolveColor(id);
@@ -147,7 +175,7 @@ class UnifiedLibraryService {
     return resolveMaterial(id);
   }
 
-  /// Сброс кэша. Вызывать после добавления/удаления пользовательских данных.
+  /// Сброс кэша. Вызывать после изменения пользовательских данных.
   static void invalidateCache() {
     _unifiedLibrary = null;
   }

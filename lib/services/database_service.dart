@@ -1,5 +1,3 @@
-// lib/services/database_service.dart
-
 import 'dart:io';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
@@ -323,5 +321,15 @@ class DatabaseService {
     final fileName = '${prefix}_${DateTime.now().millisecondsSinceEpoch}.png';
     final savedFile = await sourceFile.copy('${photosDir.path}/$fileName');
     return savedFile.path;
+  }
+
+  // ============ НАСТРОЙКИ ВИДЕО ============
+
+  /// Последний выбранный шаблон видео (для восстановления при следующем открытии)
+  static String get lastVideoTemplate =>
+      _settings.get('last_video_template', defaultValue: 'splitScreen') as String;
+
+  static Future<void> setLastVideoTemplate(String value) async {
+    await _settings.put('last_video_template', value);
   }
 }

@@ -14,7 +14,7 @@ import '../widgets/video_renderer.dart';
 
 class AnimationScreen extends StatefulWidget {
   final NailSession session;
-  final List<String>? photoTypes; // null — все фото визита
+  final List<String>? photoTypes;
   const AnimationScreen({super.key, required this.session, this.photoTypes});
 
   @override
@@ -38,11 +38,30 @@ class _AnimationScreenState extends State<AnimationScreen>
 
   bool _isExporting = false;
   double _exportProgress = 0.0;
+  bool _cancelRequested = false;
 
   @override
   void initState() {
     super.initState();
+    _restoreLastTemplate();
     _loadPhotos();
+  }
+
+  /// Восстановление последнего выбранного шаблона из settings
+  void _restoreLastTemplate() {
+    final last = DatabaseService.lastVideoTemplate;
+    _template = VideoTemplates.fromString(last);
+    _selectedGroup = _isTrendTemplate(_template) ? '🔥 Тренды' : '📼 Классика';
+  }
+
+  bool _isTrendTemplate(VideoTemplate t) {
+    return [
+      VideoTemplate.splitScreen,
+      VideoTemplate.reveal,
+      VideoTemplate.magazine,
+      VideoTemplate.reels,
+      VideoTemplate.cinematic,
+    ].contains(t);
   }
 
   Future<void> _loadPhotos() async {
@@ -74,7 +93,6 @@ class _AnimationScreenState extends State<AnimationScreen>
       images.add(await c.future);
     }
 
-    // Загружаем мастеров (автовыбор первого)
     final masters = DatabaseService.getMasters();
     final selected = masters.isNotEmpty ? masters.first : null;
     final logo = await _loadMasterLogo(selected);
@@ -93,9 +111,6 @@ class _AnimationScreenState extends State<AnimationScreen>
     }
   }
 
-    /// Синхронизирует контроллер превью с текущим шаблоном.
-  /// Слайдер: upper = images.length - 1 (проход на каждую ПАРУ фото).
-  /// Классика: upper = images.length (сегмент на каждое фото).
   void _syncController() {
     if (_images.length < 2) return;
     final double upper = VideoTemplates.get(_template).isSplitScreen
@@ -103,7 +118,6 @@ class _AnimationScreenState extends State<AnimationScreen>
         : _images.length.toDouble();
     final int durationMs = (2500 * upper).round();
 
-    // Пересоздаём контроллер (upperBound только для чтения)
     _controller?.dispose();
     _controller = AnimationController(
       vsync: this,
@@ -115,7 +129,6 @@ class _AnimationScreenState extends State<AnimationScreen>
     if (mounted) setState(() {});
   }
 
-  /// Загрузка логотипа мастера как ui.Image
   Future<ui.Image?> _loadMasterLogo(Master? m) async {
     if (m == null || !m.isCustomIcon || m.iconPath == null) return null;
     final file = File(m.iconPath!);
@@ -126,7 +139,6 @@ class _AnimationScreenState extends State<AnimationScreen>
     return c.future;
   }
 
-  /// Смена мастера
   Future<void> _onMasterChanged(Master? m) async {
     final logo = await _loadMasterLogo(m);
     setState(() {
@@ -141,12 +153,30 @@ class _AnimationScreenState extends State<AnimationScreen>
     super.dispose();
   }
 
+  /// Генерирует имя файла: {Имя клиента}_{YYYY-MM-DD}_{HHmm}.mp4
+  Future<String> _buildFileName() async {
+    final client = DatabaseService.getClient(widget.session.clientId);
+    final clientName = client?.name ?? 'Клиент';
+    // Очистка имени: убираем запрещённые в именах файлов символы
+    final safeName =
+        clientName.replaceAll(RegExp(r'[/\\?%*:|"<>]'), '_').trim();
+    final now = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    final stamp =
+        '${now.year}-${two(now.month)}-${two(now.day)}_${two(now.hour)}${two(now.minute)}';
+    return '${safeName}_$stamp.mp4';
+  }
+
   Future<void> _exportMp4({bool toGallery = false}) async {
     if (_images.length < 2 || _isExporting) return;
+
+    // Сохраняем выбранный шаблон для следующего раза
+    await DatabaseService.setLastVideoTemplate(_template.name);
 
     setState(() {
       _isExporting = true;
       _exportProgress = 0.0;
+      _cancelRequested = false;
     });
 
     try {
@@ -164,23 +194,40 @@ class _AnimationScreenState extends State<AnimationScreen>
             setState(() => _exportProgress = progress);
           }
         },
+        cancelChecker: () => _cancelRequested,
       );
 
+      if (!mounted) return;
+
       if (outputPath == null) {
-        throw Exception('Не удалось создать видео');
+        // null означает отмену пользователем (cancelChecker сработал)
+        setState(() {
+          _isExporting = false;
+          _exportProgress = 0.0;
+        });
+        TopMessage.show(context, 'Рендер отменён', color: Colors.orange);
+        return;
       }
 
-      if (mounted) {
-        if (toGallery) {
-          await Gal.putVideo(outputPath);
-          // success-снэкбар убран — не закрывает кнопки
-        } else {
-          await Share.shareXFiles(
-            [XFile(outputPath)],
-            text: 'Моя работа 💅 до и после',
-          );
-          // success-снэкбар убран — не закрывает кнопки
-        }
+      if (toGallery) {
+        // Копируем в приложение с понятным именем
+        final niceName = await _buildFileName();
+        final tempDir = await getTemporaryDirectory();
+        final nicePath = '${tempDir.path}/$niceName';
+        await File(outputPath).copy(nicePath);
+        await File(outputPath).delete();
+        await Gal.putVideo(nicePath);
+      } else {
+        // Шеринг: переименовываем для красивого имени в диалоге
+        final niceName = await _buildFileName();
+        final tempDir = await getTemporaryDirectory();
+        final nicePath = '${tempDir.path}/$niceName';
+        await File(outputPath).copy(nicePath);
+        await File(outputPath).delete();
+        await Share.shareXFiles(
+          [XFile(nicePath)],
+          text: 'Моя работа 💅 до и после',
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -191,12 +238,18 @@ class _AnimationScreenState extends State<AnimationScreen>
         setState(() {
           _isExporting = false;
           _exportProgress = 0.0;
+          _cancelRequested = false;
         });
       }
     }
   }
 
-  /// Чип группы
+  void _cancelExport() {
+    setState(() {
+      _cancelRequested = true;
+    });
+  }
+
   Widget _buildGroupChip({
     required String label,
     required bool isSelected,
@@ -227,7 +280,6 @@ class _AnimationScreenState extends State<AnimationScreen>
     );
   }
 
-  /// Чип шаблона
   Widget _buildTemplateChip({
     required String label,
     required bool isSelected,
@@ -258,12 +310,14 @@ class _AnimationScreenState extends State<AnimationScreen>
     );
   }
 
-      List<VideoTemplate> _getTemplatesForGroup(String group) {
+  List<VideoTemplate> _getTemplatesForGroup(String group) {
     if (group == '🔥 Тренды') {
       return [
         VideoTemplate.splitScreen,
         VideoTemplate.reveal,
         VideoTemplate.magazine,
+        VideoTemplate.reels,
+        VideoTemplate.cinematic,
       ];
     } else {
       return [
@@ -406,7 +460,6 @@ class _AnimationScreenState extends State<AnimationScreen>
                             ),
                             const SizedBox(height: 8),
 
-                                                // ===== ШАБЛОНЫ В ВЫБРАННОЙ ГРУППЕ (в линию, по центру) =====
                             SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
                               child: ConstrainedBox(
@@ -467,11 +520,31 @@ class _AnimationScreenState extends State<AnimationScreen>
 
                             const SizedBox(height: 12),
                             if (_isExporting) ...[
-                              LinearProgressIndicator(
-                                value: _exportProgress,
-                                backgroundColor: Colors.white10,
-                                valueColor:
-                                    const AlwaysStoppedAnimation<Color>(Colors.pink),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: LinearProgressIndicator(
+                                      value: _exportProgress,
+                                      backgroundColor: Colors.white10,
+                                      valueColor:
+                                          const AlwaysStoppedAnimation<Color>(Colors.pink),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    '${(_exportProgress * 100).round()}%',
+                                    style: const TextStyle(color: Colors.white),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  IconButton(
+                                    onPressed: _cancelExport,
+                                    icon: const Icon(Icons.close,
+                                        color: Colors.white),
+                                    tooltip: 'Отменить',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                  ),
+                                ],
                               ),
                               const SizedBox(height: 8),
                             ],

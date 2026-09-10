@@ -12,8 +12,9 @@ import '../library/unified_library_service.dart';
 import '../utils/top_message.dart';
 
 /// Цвет из фото: мастер фоткает бутылочку лака или палитру,
-/// ставит точки тапами — цвет берётся как среднее по точкам.
-/// 1 тап = точный цвет, 2-3 тапа = среднее (точнее на бликующих поверхностях).
+/// ставит точки тапами — цвет берётся как среднее по точкам,
+/// каждая точка = среднее по площадке 7×7 пикселей (без шума матрицы).
+/// Перед сохранением можно довести цвет слайдерами коррекции.
 class ColorFromPhotoScreen extends StatefulWidget {
   const ColorFromPhotoScreen({super.key});
 
@@ -43,6 +44,11 @@ class _ColorFromPhotoScreenState extends State<ColorFromPhotoScreen> {
   Color _current = Colors.grey;
   bool _saving = false;
 
+  // Коррекция «довести до как в жизни»
+  double _hueShift = 0; // градусы -30..30
+  double _satMul = 1.0; // 0.6..1.4
+  double _lightMul = 1.0; // 0.6..1.4
+
   List<NailColor> _allColors = [];
 
   @override
@@ -63,7 +69,6 @@ class _ColorFromPhotoScreenState extends State<ColorFromPhotoScreen> {
 
   // ============ ФОТО ============
 
-  /// Диалог выбора источника (показывается сразу при входе)
   Future<void> _pickSource({bool initial = false}) async {
     final source = await showDialog<ImageSource>(
       context: context,
@@ -91,14 +96,12 @@ class _ColorFromPhotoScreenState extends State<ColorFromPhotoScreen> {
       ),
     );
     if (source == null) {
-      // Отмена на входе = выход с экрана
       if (initial && mounted) Navigator.pop(context);
       return;
     }
     await _pickSourceWith(source);
   }
 
-  /// Съёмка/выбор фото конкретным источником
   Future<void> _pickSourceWith(ImageSource source) async {
     try {
       final XFile? photo =
@@ -127,6 +130,10 @@ class _ColorFromPhotoScreenState extends State<ColorFromPhotoScreen> {
       _points.clear();
       _scale = 1.0;
       _offset = Offset.zero;
+      // коррекция сбрасывается под новое фото
+      _hueShift = 0;
+      _satMul = 1.0;
+      _lightMul = 1.0;
     });
   }
 
@@ -143,17 +150,23 @@ class _ColorFromPhotoScreenState extends State<ColorFromPhotoScreen> {
     return Rect.fromLTWH(cx - w / 2, cy - h / 2, w, h);
   }
 
-  Color _pixelAt(int px, int py) {
+  /// Среднее по площадке 7×7 пикселей: убирает шум матрицы и зерно
+  Color _sampleAt(int px, int py) {
     final img = _image!;
     final bytes = _pixels!;
-    final x = px.clamp(0, img.width - 1);
-    final y = py.clamp(0, img.height - 1);
-    final idx = (y * img.width + x) * 4;
-    return Color.fromARGB(
-        255,
-        bytes.getUint8(idx),
-        bytes.getUint8(idx + 1),
-        bytes.getUint8(idx + 2));
+    int r = 0, g = 0, b = 0, n = 0;
+    for (int dy = -3; dy <= 3; dy++) {
+      for (int dx = -3; dx <= 3; dx++) {
+        final x = (px + dx).clamp(0, img.width - 1);
+        final y = (py + dy).clamp(0, img.height - 1);
+        final idx = (y * img.width + x) * 4;
+        r += bytes.getUint8(idx);
+        g += bytes.getUint8(idx + 1);
+        b += bytes.getUint8(idx + 2);
+        n++;
+      }
+    }
+    return Color.fromARGB(255, r ~/ n, g ~/ n, b ~/ n);
   }
 
   void _onTap(Offset local, Rect rect) {
@@ -165,12 +178,22 @@ class _ColorFromPhotoScreenState extends State<ColorFromPhotoScreen> {
     }
     final px = ((local.dx - rect.left) / rect.width * img.width).round();
     final py = ((local.dy - rect.top) / rect.height * img.height).round();
-    final color = _pixelAt(px, py);
+    final color = _sampleAt(px, py);
     setState(() {
       if (_points.length >= 5) _points.removeAt(0);
       _points.add(_PickPoint(px, py, color));
     });
     _recomputeCurrent();
+  }
+
+  /// Коррекция HSL поверх среднего цвета точек
+  Color _adjust(Color base) {
+    final hsl = HSLColor.fromColor(base);
+    double h = (hsl.hue + _hueShift) % 360;
+    if (h < 0) h += 360;
+    final s = (hsl.saturation * _satMul).clamp(0.0, 1.0);
+    final l = (hsl.lightness * _lightMul).clamp(0.0, 1.0);
+    return HSLColor.fromAHSL(1.0, h, s, l).toColor();
   }
 
   void _recomputeCurrent() {
@@ -182,9 +205,19 @@ class _ColorFromPhotoScreenState extends State<ColorFromPhotoScreen> {
       b += p.color.blue;
     }
     final n = _points.length;
+    final base = Color.fromARGB(255, r ~/ n, g ~/ n, b ~/ n);
     setState(() {
-      _current = Color.fromARGB(255, r ~/ n, g ~/ n, b ~/ n);
+      _current = _adjust(base);
     });
+  }
+
+  void _setAdj({double? hue, double? sat, double? light}) {
+    setState(() {
+      if (hue != null) _hueShift = hue;
+      if (sat != null) _satMul = sat;
+      if (light != null) _lightMul = light;
+    });
+    _recomputeCurrent();
   }
 
   // ============ ПОДСКАЗКИ ============
@@ -239,8 +272,13 @@ class _ColorFromPhotoScreenState extends State<ColorFromPhotoScreen> {
         name = '$name №$n';
       }
 
+      final adjNote = (_hueShift.abs() > 0.5 ||
+              (_satMul - 1).abs() > 0.02 ||
+              (_lightMul - 1).abs() > 0.02)
+          ? ' • коррекция'
+          : '';
       final desc =
-          'Цвет из фото${_points.length > 1 ? ' (среднее ${_points.length} точек)' : ''} • ${_hex(_current)}';
+          'Цвет из фото${_points.length > 1 ? ' (среднее ${_points.length} точек)' : ''}$adjNote • ${_hex(_current)}';
 
       await UnifiedLibraryService.addCustomColor(
         name,
@@ -261,12 +299,10 @@ class _ColorFromPhotoScreenState extends State<ColorFromPhotoScreen> {
         );
       }
     } catch (e) {
-      // Ошибка сохранения теперь ВИДНА, а не молчит
       if (mounted) {
         TopMessage.show(context, 'Ошибка сохранения: $e', color: Colors.red);
       }
     } finally {
-      // Кнопка всегда разблокируется, даже после ошибки
       if (mounted) setState(() => _saving = false);
     }
   }
@@ -345,7 +381,6 @@ class _ColorFromPhotoScreenState extends State<ColorFromPhotoScreen> {
                           ),
                         ),
                       ),
-                      // Пустое состояние: понятные кнопки источников
                       if (_image == null)
                         Center(
                           child: Column(
@@ -397,7 +432,7 @@ class _ColorFromPhotoScreenState extends State<ColorFromPhotoScreen> {
                               borderRadius: BorderRadius.circular(16),
                             ),
                             child: const Text(
-                              'Тапни по цвету на фото\n2-3 тапа — точнее (среднее)\n2 пальца — зум',
+                              'Тапни по цвету на фото\n2-3 тапа — точнее (среднее)\n2 пальца — зум\n💡 Дневной свет у окна = самый честный цвет',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                   color: Colors.white, fontSize: 14),
@@ -422,7 +457,6 @@ class _ColorFromPhotoScreenState extends State<ColorFromPhotoScreen> {
                 children: [
                   Row(
                     children: [
-                      // Пустой слот цвета: контур + пипетка вместо серого квадрата
                       Container(
                         width: 56,
                         height: 56,
@@ -471,7 +505,19 @@ class _ColorFromPhotoScreenState extends State<ColorFromPhotoScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
+
+                  // === КОРРЕКЦИЯ «довести до как в жизни» ===
+                  if (_points.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    _miniSlider('Оттенок', _hueShift, -30, 30,
+                        (v) => _setAdj(hue: v)),
+                    _miniSlider('Насыщ.', _satMul, 0.6, 1.4,
+                        (v) => _setAdj(sat: v)),
+                    _miniSlider('Светлее', _lightMul, 0.6, 1.4,
+                        (v) => _setAdj(light: v)),
+                  ],
+
+                  const SizedBox(height: 6),
                   TextField(
                     controller: _nameController,
                     style: const TextStyle(color: Colors.white, fontSize: 16),
@@ -514,6 +560,41 @@ class _ColorFromPhotoScreenState extends State<ColorFromPhotoScreen> {
       ),
     );
   }
+
+  /// Компактный слайдер коррекции
+  Widget _miniSlider(String label, double value, double min, double max,
+      ValueChanged<double> onChanged) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 62,
+          child: Text(
+            label,
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+        ),
+        Expanded(
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 3,
+              thumbShape:
+                  const RoundSliderThumbShape(enabledThumbRadius: 7),
+              overlayShape:
+                  const RoundSliderOverlayShape(overlayRadius: 12),
+            ),
+            child: Slider(
+              value: value,
+              min: min,
+              max: max,
+              activeColor: Colors.pink,
+              inactiveColor: Colors.white24,
+              onChanged: onChanged,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// Маркеры точек поверх фото
@@ -537,12 +618,9 @@ class _PointsPainter extends CustomPainter {
       final pos = rect.topLeft +
           Offset(p.px / imgW * rect.width, p.py / imgH * rect.height);
 
-      // Внешнее кольцо — белое, для видимости на любом фоне
       canvas.drawCircle(
           pos, 11, Paint()..color = Colors.white.withOpacity(0.9));
-      // Внутренний круг — сам взятый цвет
       canvas.drawCircle(pos, 8, Paint()..color = p.color);
-      // Обводка
       canvas.drawCircle(
           pos,
           11,

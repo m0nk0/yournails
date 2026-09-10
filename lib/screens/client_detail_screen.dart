@@ -13,6 +13,7 @@ import '../utils/responsive.dart';
 import '../utils/top_message.dart';
 import '../widgets/home_app_bar.dart';
 import 'photo_view_screen.dart';
+import 'edit_screen.dart';
 import 'animation_screen.dart';
 import 'align_after_screen.dart';
 
@@ -490,6 +491,66 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  // ============ УМНАЯ "ПРИМЕРКА": ИЗ ФОТО "ДО" ИЛИ ГОТОВОЕ ФОТО ============
+
+  /// Тап по пустому слоту «Примерка»: предлагаем сделать примерку
+  /// из фото «До» (результат запишется в этот же визит)
+  /// или приложить готовую картинку
+  Future<void> _addTryOnPhotoSmart(NailSession session) async {
+    if (session.hasBefore) {
+      final choice = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Примерка', style: TextStyle(fontSize: 20)),
+          content: const Text(
+              'Сделать примерку из фото «До» или добавить готовую картинку?',
+              style: TextStyle(fontSize: 16)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'photo'),
+              child: const Text('Добавить фото',
+                  style: TextStyle(fontSize: 16)),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(context, 'tryon'),
+              icon: const Icon(Icons.brush, size: 20),
+              label: const Text('Сделать примерку',
+                  style: TextStyle(fontSize: 16)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.pink,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      );
+      if (choice == 'tryon') {
+        await _tryOnFromBefore(session);
+      } else if (choice == 'photo') {
+        await _addTryOnPhoto(session);
+      }
+      return;
+    }
+    // Фото «До» нет — только приложить готовую картинку
+    await _addTryOnPhoto(session);
+  }
+
+  /// Открывает примерку с фото «До» визита; результат
+  /// записывается в тот же визит (ResultScreen с targetSession)
+  Future<void> _tryOnFromBefore(NailSession session) async {
+    if (session.beforePhotoPath == null) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EditScreen(
+          imageFile: File(session.beforePhotoPath!),
+          targetSession: session,
+        ),
+      ),
+    );
+    _loadSessions();
   }
 
   // ============ ФОТО "ПОСЛЕ" — С ВЫБОРОМ ИСТОЧНИКА ============
@@ -1375,7 +1436,7 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
                 Expanded(
                   child: _buildPhotoColumn('Примерка', session.hasTryOn,
                       session.tryOnPhotoPath, session, 'tryon',
-                      () => _addTryOnPhoto(session)),
+                      () => _addTryOnPhotoSmart(session)),
                 ),
                 const SizedBox(width: 8),
                 Expanded(

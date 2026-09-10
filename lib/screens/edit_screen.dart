@@ -8,6 +8,7 @@ import '../models/nail_zone.dart';
 import '../models/selected_design.dart';
 import '../models/nail_shape.dart';
 import '../models/nail_pattern.dart';
+import '../models/nail_session.dart';
 import '../services/tryon_session_service.dart';
 import '../services/database_service.dart';
 import '../widgets/nail_3d_renderer.dart';
@@ -26,7 +27,16 @@ class EditScreen extends StatefulWidget {
   /// Сессия для восстановления (если пользователь выбрал «Продолжить»)
   final TryOnSession? restored;
 
-  const EditScreen({super.key, required this.imageFile, this.restored});
+  /// Визит, в который нужно записать результат примерки
+  /// (вместо создания нового). Передаётся из карточки клиента.
+  final NailSession? targetSession;
+
+  const EditScreen({
+    super.key,
+    required this.imageFile,
+    this.restored,
+    this.targetSession,
+  });
 
   @override
   State<EditScreen> createState() => _EditScreenState();
@@ -384,6 +394,7 @@ class _EditScreenState extends State<EditScreen> {
           design: design,
           imageOffset: _imageOffset,
           imageScale: _imageScale,
+          targetSession: widget.targetSession,
         ),
       ),
     );

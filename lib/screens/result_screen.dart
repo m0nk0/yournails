@@ -13,6 +13,7 @@ import '../models/selected_design.dart';
 import '../models/nail_shape.dart';
 import '../models/nail_pattern.dart';
 import '../models/my_design.dart';
+import '../models/nail_session.dart';
 import '../services/database_service.dart';
 import '../utils/responsive.dart';
 import '../utils/top_message.dart';
@@ -28,6 +29,10 @@ class ResultScreen extends StatefulWidget {
   final Offset imageOffset;
   final double imageScale;
 
+  /// Визит для записи примерки (если пришли из карточки клиента).
+  /// Если null — кнопка «Сохранить клиенту» создаёт новый визит.
+  final NailSession? targetSession;
+
   const ResultScreen({
     super.key,
     required this.imageFile,
@@ -35,6 +40,7 @@ class ResultScreen extends StatefulWidget {
     required this.design,
     required this.imageOffset,
     required this.imageScale,
+    this.targetSession,
   });
 
   @override
@@ -194,6 +200,46 @@ class _ResultScreenState extends State<ResultScreen> {
         cuticleColor: design.cuticleColor?.value, // ← цвет кожи клиента
         createdAt: DateTime.now(),
       ));
+    }
+  }
+
+  /// Сохранить примерку в существующий визит (без создания нового).
+  /// Вызывается, когда пришли из карточки клиента (targetSession != null).
+  Future<void> _saveToExistingSession() async {
+    final session = widget.targetSession;
+    if (session == null) return;
+    setState(() => _isSaving = true);
+    try {
+      final tryOnBytes = await _renderTryOnImage(withDesign: true);
+      final tempDir = await getTemporaryDirectory();
+      final tryOnTemp = File('${tempDir.path}/tryon_temp.png');
+      await tryOnTemp.writeAsBytes(tryOnBytes);
+      final tryOnPath =
+          await DatabaseService.savePhoto(tryOnTemp, 'tryon_${session.id}');
+      await tryOnTemp.delete();
+
+      final updated = NailSession(
+        id: session.id,
+        clientId: session.clientId,
+        beforePhotoPath: session.beforePhotoPath,
+        tryOnPhotoPath: tryOnPath,
+        afterPhotoPath: session.afterPhotoPath,
+        note: session.note,
+        price: session.price,
+        serviceName: session.serviceName,
+        createdAt: session.createdAt,
+      );
+      await DatabaseService.updateSession(updated);
+      if (mounted) {
+        TopMessage.show(context, 'Примерка сохранена в визит',
+            color: Colors.green);
+      }
+    } catch (e) {
+      if (mounted) {
+        TopMessage.show(context, 'Ошибка при сохранении: $e');
+      }
+    } finally {
+      setState(() => _isSaving = false);
     }
   }
 
@@ -429,7 +475,11 @@ class _ResultScreenState extends State<ResultScreen> {
                           SizedBox(width: tablet ? 16 : 12),
                           Expanded(
                             child: ElevatedButton.icon(
-                              onPressed: _isSaving ? null : _saveToClient,
+                              onPressed: _isSaving
+                                  ? null
+                                  : (widget.targetSession != null
+                                      ? _saveToExistingSession
+                                      : _saveToClient),
                               icon: _isSaving
                                   ? const SizedBox(
                                       width: 20,
@@ -441,7 +491,9 @@ class _ResultScreenState extends State<ResultScreen> {
                               label: Text(
                                   _isSaving
                                       ? 'Сохранение...'
-                                      : 'Сохранить клиенту',
+                                      : (widget.targetSession != null
+                                          ? 'Сохранить в визит'
+                                          : 'Сохранить клиенту'),
                                   style: TextStyle(
                                       fontSize: Responsive.fs(context, 15))),
                               style: ElevatedButton.styleFrom(

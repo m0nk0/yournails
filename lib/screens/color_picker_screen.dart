@@ -80,10 +80,11 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
     for (final g in available) {
       if (g != 'my' && !ordered.contains(g)) ordered.add(g);
     }
-    // «Мои цвета» ВСЕГДА в конце (даже пустые): состав вкладок стабилен,
+    // Состав вкладок стабилен (My цвета всегда присутствуют),
     // поэтому TabController создаётся один раз и никогда не пересоздаётся.
     // Именно пересоздание контроллера ломало TabBarView (overflow 99895 px).
-    final tabs = <String>['all', ...ordered, 'my'];
+    // «Мои цвета» ПЕРВЫЕ: это рабочая палитра мастера, до неё не надо мотать.
+    final tabs = <String>['my', 'all', ...ordered];
 
     // Контроллер создаём ОДИН раз, до setState с _loading = false
     if (_tabController == null) {
@@ -322,8 +323,12 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
                 labelColor: Colors.white,
                 unselectedLabelColor: Colors.white60,
                 labelStyle: const TextStyle(
-                  fontSize: 14,
+                  fontSize: 16,
                   fontWeight: FontWeight.bold,
+                ),
+                unselectedLabelStyle: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
                 ),
                 tabs: _tabs
                     .map((g) => Tab(
@@ -331,7 +336,7 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(_groupIcon(g),
-                                  style: const TextStyle(fontSize: 16)),
+                                  style: const TextStyle(fontSize: 18)),
                               const SizedBox(width: 4),
                               Text(_groupName(g)),
                             ],

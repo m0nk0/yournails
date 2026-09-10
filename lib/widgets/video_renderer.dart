@@ -6,6 +6,7 @@ import 'package:flutter_quick_video_encoder/flutter_quick_video_encoder.dart';
 import 'package:path_provider/path_provider.dart';
 import '../constants/master_icons.dart';
 import '../models/master.dart';
+
 enum TransitionType { sparkles, circle, flash, wipe, zoom, slide, fade }
 
 enum VideoTemplate {
@@ -14,7 +15,6 @@ enum VideoTemplate {
   reveal,
   magazine,
   reels,
-  cinematic,
   // === КЛАССИКА ===
   clean,
   instagram,
@@ -37,11 +37,6 @@ class TemplateConfig {
   final bool isReveal;
   final bool isMagazine;
   final bool isReels;
-  final bool isCinematic;
-  /// Высота чёрных полос сверху/снизу (только для cinematic)
-  final double letterboxHeight;
-  /// Интенсивность зернистости 0..1 (только для cinematic)
-  final double grainIntensity;
 
   const TemplateConfig({
     required this.name,
@@ -58,9 +53,6 @@ class TemplateConfig {
     this.isReveal = false,
     this.isMagazine = false,
     this.isReels = false,
-    this.isCinematic = false,
-    this.letterboxHeight = 0,
-    this.grainIntensity = 0,
   });
 
   double get aspectRatio => width / height;
@@ -134,7 +126,7 @@ class VideoTemplates {
           isMagazine: true,
         );
 
-      // === НОВОЕ: REELS — вертикальный формат для TikTok/Instagram Reels ===
+      // === REELS — вертикальный формат для TikTok/Instagram Reels ===
       case VideoTemplate.reels:
         return const TemplateConfig(
           name: 'Reels',
@@ -146,39 +138,11 @@ class VideoTemplates {
           labelBg: Color(0xFFE91E63),
           labelStyle: TextStyle(
             color: Colors.white,
-            fontSize: 72,
+            fontSize: 140,
             fontWeight: FontWeight.w900,
             letterSpacing: 6,
-            shadows: [
-              Shadow(color: Colors.black, blurRadius: 18),
-              Shadow(color: Colors.black, blurRadius: 4),
-            ],
           ),
           isReels: true,
-        );
-
-      // === НОВОЕ: CINEMATIC — широкоэкранный 16:9 с letterbox + зерно ===
-      case VideoTemplate.cinematic:
-        return const TemplateConfig(
-          name: 'Кино',
-          icon: '🎞',
-          width: 1920,
-          height: 1080,
-          bgColor: Colors.black,
-          borderWidth: 0,
-          labelBg: Color(0xFFE91E63),
-          labelStyle: TextStyle(
-            color: Colors.white,
-            fontSize: 42,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 8,
-            shadows: [
-              Shadow(color: Colors.black, blurRadius: 12),
-            ],
-          ),
-          isCinematic: true,
-          letterboxHeight: 140,
-          grainIntensity: 0.10,
         );
 
       // === КЛАССИКА ===
@@ -249,7 +213,8 @@ class VideoTemplates {
     }
   }
 
-  /// Парсит шаблон из строки (для восстановления из settings)
+  /// Парсит шаблон из строки (для восстановления из settings).
+  /// Если сохранён удалённый шаблон — fallback на splitScreen.
   static VideoTemplate fromString(String? name) {
     if (name == null) return VideoTemplate.splitScreen;
     for (final t in VideoTemplate.values) {
@@ -285,9 +250,7 @@ class VideoRenderer {
         masterLogoImage: masterLogoImage);
   }
 
-  /// [cancelChecker] — функция, возвращающая true, если пользователь отменил рендер.
-  /// Вызывается перед каждым кадром. Если возвращает true — рендер прерывается,
-  /// временный файл удаляется, возвращается null.
+  /// [cancelChecker] — возвращает true, если пользователь отменил рендер.
   static Future<String?> renderVideo({
     required List<ui.Image> images,
     required List<String> labels,
@@ -334,10 +297,8 @@ class VideoRenderer {
 
       for (int seg = 0; seg < segments; seg++) {
         for (int f = 0; f < framesPerSegment; f++) {
-          // Проверка отмены перед каждым кадром
           if (cancelChecker != null && cancelChecker()) {
             await FlutterQuickVideoEncoder.finish();
-            // Удаляем незавершённый файл
             final file = File(outputPath);
             if (await file.exists()) await file.delete();
             return null;
@@ -377,7 +338,6 @@ class VideoRenderer {
       return outputPath;
     } catch (e) {
       print('Ошибка рендеринга видео: $e');
-      // Чистим битый файл
       try {
         final file = File(outputPath);
         if (await file.exists()) await file.delete();
@@ -434,19 +394,6 @@ class VideoRenderer {
     // === REELS — вертикальный формат с крупной типографикой ===
     if (tpl.isReels) {
       _paintReels(canvas, size, v,
-          images: images,
-          labels: labels,
-          tpl: tpl,
-          transition: transition,
-          seeds: seeds,
-          master: master,
-          masterLogoImage: masterLogoImage);
-      return;
-    }
-
-    // === CINEMATIC — широкоэкранный с letterbox и зерном ===
-    if (tpl.isCinematic) {
-      _paintCinematic(canvas, size, v,
           images: images,
           labels: labels,
           tpl: tpl,
@@ -523,12 +470,17 @@ class VideoRenderer {
     }
 
     // ===== НАДПИСЬ (ДО / ПРИМЕРКА / ПОСЛЕ) — ВВЕРХ ПО ЦЕНТРУ =====
+    // Масштаб стиля через k: превью и экспорт одинаковы
+    final labelStyle = tpl.labelStyle.copyWith(
+      fontSize: tpl.labelStyle.fontSize! * k,
+      letterSpacing: (tpl.labelStyle.letterSpacing ?? 0) * k,
+    );
     final tp = TextPainter(
-      text: TextSpan(text: labels[idx], style: tpl.labelStyle),
+      text: TextSpan(text: labels[idx], style: labelStyle),
       textDirection: TextDirection.ltr,
     )..layout();
 
-    final ls = tpl.labelStyle.fontSize! * k;
+    final ls = labelStyle.fontSize!;
     final padX = 12 * k;
     final padY = 6 * k;
     final boxW = tp.width + padX * 2;
@@ -552,8 +504,8 @@ class VideoRenderer {
   }
 
   // === REELS — вертикальный формат для TikTok/Instagram Reels ===
-  // Фото cover-кропом на весь экран, жирный заголовок "ДО" / "ПОСЛЕ"
-  // по центру, розовая рамка, мастер внизу.
+  // Фото cover-кропом на весь экран, жирный заголовок по центру
+  // с чёрным контуром (без серой плашки), розовая рамка, мастер внизу.
   static void _paintReels(
     Canvas canvas,
     Size size,
@@ -625,7 +577,8 @@ class VideoRenderer {
           break;
         case TransitionType.circle:
           canvas.save();
-          final diag = math.sqrt(size.width * size.width + size.height * size.height);
+          final diag = math.sqrt(
+              size.width * size.width + size.height * size.height);
           canvas.clipPath(Path()
             ..addOval(Rect.fromCircle(
                 center: Offset(size.width / 2, size.height / 2),
@@ -654,144 +607,78 @@ class VideoRenderer {
         ..strokeWidth = 12 * k,
     );
 
-    // === ОГРОМНЫЙ ЗАГОЛОВОК ПО ЦЕНТРУ ===
-    final tp = TextPainter(
-      text: TextSpan(text: labels[idx], style: tpl.labelStyle),
+    // === ЗАГОЛОВОК: масштаб через k + автоподбор под ширину кадра ===
+    double fs = tpl.labelStyle.fontSize! * k;
+    double ls = (tpl.labelStyle.letterSpacing ?? 0) * k;
+
+    TextPainter measure() => TextPainter(
+          text: TextSpan(
+            text: labels[idx],
+            style: TextStyle(
+              fontSize: fs,
+              fontWeight: tpl.labelStyle.fontWeight,
+              fontStyle: tpl.labelStyle.fontStyle,
+              letterSpacing: ls,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+
+    TextPainter tp = measure();
+    final maxW = size.width * 0.84;
+    if (tp.width > maxW) {
+      final f = maxW / tp.width;
+      fs *= f;
+      ls *= f;
+      tp = measure();
+    }
+    final lx = (size.width - tp.width) / 2;
+    // Капшен в нижней трети кадра: центр остаётся под ноготь,
+    // до мастер-бейджа внизу текст не доезжает
+    final ly = size.height * 0.70;
+
+    // Чёрный контур вместо серой плашки: читается на любом фоне
+    final outlineTp = TextPainter(
+      text: TextSpan(
+        text: labels[idx],
+        style: TextStyle(
+          fontSize: fs,
+          fontWeight: tpl.labelStyle.fontWeight,
+          fontStyle: tpl.labelStyle.fontStyle,
+          letterSpacing: ls,
+          foreground: Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = math.max(2.0, fs * 0.16)
+            ..strokeJoin = StrokeJoin.round
+            ..color = Colors.black.withOpacity(0.85),
+        ),
+      ),
       textDirection: TextDirection.ltr,
     )..layout();
-    final lx = (size.width - tp.width) / 2;
-    final ly = (size.height - tp.height) / 2;
+    outlineTp.paint(canvas, Offset(lx, ly));
 
-    // Тёмная подложка для читаемости
-    final padX = 40 * k;
-    final padY = 20 * k;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-          Rect.fromLTWH(
-              lx - padX, ly - padY, tp.width + padX * 2, tp.height + padY * 2),
-          Radius.circular(24 * k)),
-      Paint()..color = Colors.black.withOpacity(0.55),
-    );
-    tp.paint(canvas, Offset(lx, ly));
+    // Белая заливка с мягкой тенью
+    final fillTp = TextPainter(
+      text: TextSpan(
+        text: labels[idx],
+        style: TextStyle(
+          fontSize: fs,
+          fontWeight: tpl.labelStyle.fontWeight,
+          fontStyle: tpl.labelStyle.fontStyle,
+          letterSpacing: ls,
+          color: Colors.white,
+          shadows: [
+            Shadow(color: Colors.black.withOpacity(0.55), blurRadius: 14 * k),
+          ],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    fillTp.paint(canvas, Offset(lx, ly));
 
     // Мастер внизу (в зоне safe area)
     if (master != null) {
       _drawMasterBadge(canvas, size, k, 0, master, masterLogoImage);
-    }
-  }
-
-  // === CINEMATIC — широкоэкранный 16:9 с letterbox и зерном ===
-  // Чёрные полосы сверху/снизу, фото в центре, grain overlay,
-  // мастер-бейдж в правой нижней "безопасной" зоне.
-  static void _paintCinematic(
-    Canvas canvas,
-    Size size,
-    double v, {
-    required List<ui.Image> images,
-    required List<String> labels,
-    required TemplateConfig tpl,
-    required TransitionType transition,
-    required List<Offset> seeds,
-    Master? master,
-    ui.Image? masterLogoImage,
-  }) {
-    final n = images.length;
-    final idx = v.floor() % n;
-    final next = (idx + 1) % n;
-    final t = (v - v.floor()).clamp(0.0, 1.0);
-    final transT = t < 0.6 ? 0.0 : (t - 0.6) / 0.4;
-    final k = size.width / tpl.width;
-
-    final letterboxH = tpl.letterboxHeight * k;
-
-    // Чёрный фон (letterbox)
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height),
-        Paint()..color = Colors.black);
-
-    // Область изображения (между чёрными полосами)
-    final inner = Rect.fromLTRB(0, letterboxH, size.width,
-        size.height - letterboxH);
-
-    // Фото с Ken Burns
-    final kenBurns = 1.0 + 0.05 * t;
-    _drawCover(canvas, images[idx], inner, 1.0, scale: kenBurns);
-
-    if (transT > 0) {
-      switch (transition) {
-        case TransitionType.fade:
-          _drawCover(canvas, images[next], inner, transT, scale: 1.0);
-          break;
-        case TransitionType.wipe:
-          canvas.save();
-          canvas.clipRect(
-              Rect.fromLTWH(inner.left, inner.top, inner.width * transT, inner.height));
-          _drawCover(canvas, images[next], inner, 1.0, scale: 1.0);
-          canvas.restore();
-          break;
-        case TransitionType.zoom:
-          _drawCover(canvas, images[next], inner, math.min(1, transT * 2),
-              scale: 1.3 - 0.3 * transT);
-          break;
-        case TransitionType.flash:
-          _drawCover(canvas, images[next], inner, math.min(1, transT * 1.5),
-              scale: 1.0);
-          final flash = math.sin(transT * math.pi);
-          canvas.drawRect(inner,
-              Paint()..color = Colors.white.withOpacity(flash * 0.9));
-          break;
-        case TransitionType.slide:
-          canvas.save();
-          canvas.clipRect(Rect.fromLTWH(
-              inner.left + (1 - transT) * inner.width,
-              inner.top,
-              inner.width * transT,
-              inner.height));
-          _drawCover(canvas, images[next], inner, 1.0, scale: 1.0);
-          canvas.restore();
-          break;
-        case TransitionType.circle:
-          canvas.save();
-          final diag = math.sqrt(inner.width * inner.width + inner.height * inner.height);
-          canvas.clipPath(Path()
-            ..addOval(Rect.fromCircle(
-                center: inner.center, radius: transT * diag * 0.6)));
-          _drawCover(canvas, images[next], inner, 1.0, scale: 1.0);
-          canvas.restore();
-          break;
-        case TransitionType.sparkles:
-          _drawCover(canvas, images[next], inner, transT, scale: 1.0);
-          _drawSparkles(canvas, inner, transT, k, seeds);
-          break;
-      }
-    }
-
-    // === ЗЕРНО (псевдослучайные точки по всей площади изображения) ===
-    if (tpl.grainIntensity > 0) {
-      final grainRand = math.Random(17);
-      final grainCount = (size.width * size.height * 0.00008).toInt();
-      final grainPaint = Paint();
-      for (int i = 0; i < grainCount; i++) {
-        final x = grainRand.nextDouble() * size.width;
-        final y = letterboxH + grainRand.nextDouble() * inner.height;
-        final brightness = grainRand.nextDouble() < 0.5 ? 255 : 0;
-        final a = tpl.grainIntensity * (0.4 + grainRand.nextDouble() * 0.6);
-        grainPaint.color = Color.fromARGB((a * 255).round(), brightness, brightness, brightness);
-        canvas.drawCircle(Offset(x, y), 1.2 * k, grainPaint);
-      }
-    }
-
-    // === НАДПИСЬ ПО ЦЕНТРУ ВЕРХНЕЙ LETTERBOX-ПОЛОСЫ ===
-    final tp = TextPainter(
-      text: TextSpan(text: labels[idx], style: tpl.labelStyle),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    tp.paint(canvas,
-        Offset((size.width - tp.width) / 2,
-            (letterboxH - tp.height) / 2));
-
-    // Мастер внизу справа (safe area внутри изображения)
-    if (master != null) {
-      _drawMasterBadge(canvas, size, k, letterboxH, master, masterLogoImage);
     }
   }
 
@@ -882,15 +769,20 @@ class VideoRenderer {
     final bool afterDominant = splitX > size.width / 2;
     final caption = afterDominant ? afterLabel : beforeLabel;
 
+    // Масштаб надписи через k
+    final capStyle = tpl.labelStyle.copyWith(
+      fontSize: tpl.labelStyle.fontSize! * k,
+      letterSpacing: (tpl.labelStyle.letterSpacing ?? 0) * k,
+    );
     final capTp = TextPainter(
-      text: TextSpan(text: caption, style: tpl.labelStyle),
+      text: TextSpan(text: caption, style: capStyle),
       textDirection: TextDirection.ltr,
     )..layout();
 
     final padX = 16 * k;
     final padY = 10 * k;
     final boxW = capTp.width + padX * 2;
-    final boxH = tpl.labelStyle.fontSize! + padY * 2;
+    final boxH = capStyle.fontSize! + padY * 2;
     final boxX = (size.width - boxW) / 2;
     final boxY = 60 * k;
 
@@ -956,12 +848,17 @@ class VideoRenderer {
 
     final captionOpacity = ((photoOpacity - 0.3) / 0.7).clamp(0.0, 1.0);
     if (captionOpacity > 0) {
+      // Масштаб надписи через k
+      final capStyle = tpl.labelStyle.copyWith(
+        fontSize: tpl.labelStyle.fontSize! * k,
+        letterSpacing: (tpl.labelStyle.letterSpacing ?? 0) * k,
+      );
       final tp = TextPainter(
-        text: TextSpan(text: labels[idx], style: tpl.labelStyle),
+        text: TextSpan(text: labels[idx], style: capStyle),
         textDirection: TextDirection.ltr,
       )..layout();
 
-      final ls = tpl.labelStyle.fontSize! * k;
+      final ls = capStyle.fontSize!;
       final padX = 20 * k;
       final padY = 14 * k;
       final boxW = tp.width + padX * 2;
@@ -1153,7 +1050,6 @@ class VideoRenderer {
   }
 
   /// Бейдж мастера: розовая рамка + розовые буквы на полупрозрачном белом.
-  /// [baseOffsetY] — смещение от низа кадра (для cinematic с letterbox)
   static void _drawMasterBadge(
     Canvas canvas,
     Size size,

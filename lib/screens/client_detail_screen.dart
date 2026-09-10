@@ -217,8 +217,12 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
       ),
     );
     if (ok == true) {
-      final updated = _client.copyWith(
+      final updated = Client(
+        id: _client.id,
+        name: _client.name,
+        phone: _client.phone,
         note: controller.text.trim().isEmpty ? null : controller.text.trim(),
+        createdAt: _client.createdAt,
       );
       await DatabaseService.updateClient(updated);
       _loadSessions();
@@ -235,7 +239,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
-          // Мягкая проверка дубликата телефона (сам клиент исключён)
           final digits =
               phoneController.text.replaceAll(RegExp(r'[^0-9]'), '');
           String? duplicate;
@@ -309,11 +312,14 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     );
 
     if (ok == true && nameController.text.trim().isNotEmpty) {
-      final updated = _client.copyWith(
+      final updated = Client(
+        id: _client.id,
         name: nameController.text.trim(),
         phone: phoneController.text.trim().isEmpty
             ? null
             : phoneController.text.trim(),
+        note: _client.note,
+        createdAt: _client.createdAt,
       );
       await DatabaseService.updateClient(updated);
       _loadSessions();
@@ -323,7 +329,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
 
   // ============ УДАЛЕНИЕ КЛИЕНТА ============
 
-  /// Осознанное удаление: только из карточки, с полным списком последствий
   Future<void> _deleteClient() async {
     final sessions = DatabaseService.getSessionsByClient(_client.id);
     final photoCount = sessions.fold<int>(
@@ -421,6 +426,72 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     }
   }
 
+  // ============ ДОБАВЛЕНИЕ ФОТО "ДО" В СУЩЕСТВУЮЩИЙ ВИЗИТ ============
+
+  Future<void> _addBeforePhoto(NailSession session) async {
+    final source = await _showSourceDialog();
+    if (source == null) return;
+    final XFile? photo =
+        await _picker.pickImage(source: source, imageQuality: 80);
+    if (photo == null) return;
+    setState(() => _isLoading = true);
+    try {
+      final savedPath = await DatabaseService.savePhoto(
+          File(photo.path), 'before_${session.id}');
+      final updated = NailSession(
+        id: session.id,
+        clientId: session.clientId,
+        beforePhotoPath: savedPath,
+        tryOnPhotoPath: session.tryOnPhotoPath,
+        afterPhotoPath: session.afterPhotoPath,
+        note: session.note,
+        price: session.price,
+        serviceName: session.serviceName,
+        createdAt: session.createdAt,
+      );
+      await DatabaseService.updateSession(updated);
+      _loadSessions();
+      if (mounted) _snack('Фото "до" сохранено', Colors.green);
+    } catch (e) {
+      if (mounted) _snack('Ошибка: $e', Colors.red);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // ============ ДОБАВЛЕНИЕ ФОТО "ПРИМЕРКА" В СУЩЕСТВУЮЩИЙ ВИЗИТ ============
+
+  Future<void> _addTryOnPhoto(NailSession session) async {
+    final source = await _showSourceDialog();
+    if (source == null) return;
+    final XFile? photo =
+        await _picker.pickImage(source: source, imageQuality: 80);
+    if (photo == null) return;
+    setState(() => _isLoading = true);
+    try {
+      final savedPath = await DatabaseService.savePhoto(
+          File(photo.path), 'tryon_${session.id}');
+      final updated = NailSession(
+        id: session.id,
+        clientId: session.clientId,
+        beforePhotoPath: session.beforePhotoPath,
+        tryOnPhotoPath: savedPath,
+        afterPhotoPath: session.afterPhotoPath,
+        note: session.note,
+        price: session.price,
+        serviceName: session.serviceName,
+        createdAt: session.createdAt,
+      );
+      await DatabaseService.updateSession(updated);
+      _loadSessions();
+      if (mounted) _snack('Фото "примерка" сохранено', Colors.green);
+    } catch (e) {
+      if (mounted) _snack('Ошибка: $e', Colors.red);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
   // ============ ФОТО "ПОСЛЕ" — С ВЫБОРОМ ИСТОЧНИКА ============
 
   Future<void> _addAfterPhoto(NailSession session) async {
@@ -474,7 +545,17 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
   }
 
   Future<void> _updateAfter(NailSession session, String savedPath) async {
-    final updated = session.copyWith(afterPhotoPath: savedPath);
+    final updated = NailSession(
+      id: session.id,
+      clientId: session.clientId,
+      beforePhotoPath: session.beforePhotoPath,
+      tryOnPhotoPath: session.tryOnPhotoPath,
+      afterPhotoPath: savedPath,
+      note: session.note,
+      price: session.price,
+      serviceName: session.serviceName,
+      createdAt: session.createdAt,
+    );
     await DatabaseService.updateSession(updated);
     _loadSessions();
     if (mounted) _snack('Фото "после" сохранено', Colors.green);
@@ -497,10 +578,16 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
         session.price == null && (session.note ?? '').isEmpty) {
       await DatabaseService.deleteSession(session.id);
     } else {
-      final updated = session.copyWith(
+      final updated = NailSession(
+        id: session.id,
+        clientId: session.clientId,
         beforePhotoPath: before,
         tryOnPhotoPath: tryOn,
         afterPhotoPath: after,
+        note: session.note,
+        price: session.price,
+        serviceName: session.serviceName,
+        createdAt: session.createdAt,
       );
       await DatabaseService.updateSession(updated);
     }
@@ -519,7 +606,17 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     if (photoType == 'before') {
       final savedPath = await DatabaseService.savePhoto(
           File(photo.path), 'before_${session.id}');
-      final updated = session.copyWith(beforePhotoPath: savedPath);
+      final updated = NailSession(
+        id: session.id,
+        clientId: session.clientId,
+        beforePhotoPath: savedPath,
+        tryOnPhotoPath: session.tryOnPhotoPath,
+        afterPhotoPath: session.afterPhotoPath,
+        note: session.note,
+        price: session.price,
+        serviceName: session.serviceName,
+        createdAt: session.createdAt,
+      );
       await DatabaseService.updateSession(updated);
     } else if (photoType == 'after') {
       if (session.beforePhotoPath != null) {
@@ -538,13 +635,33 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
           final savedPath =
               await DatabaseService.savePhoto(tempFile, 'after_${session.id}');
           await tempFile.delete();
-          final updated = session.copyWith(afterPhotoPath: savedPath);
+          final updated = NailSession(
+            id: session.id,
+            clientId: session.clientId,
+            beforePhotoPath: session.beforePhotoPath,
+            tryOnPhotoPath: session.tryOnPhotoPath,
+            afterPhotoPath: savedPath,
+            note: session.note,
+            price: session.price,
+            serviceName: session.serviceName,
+            createdAt: session.createdAt,
+          );
           await DatabaseService.updateSession(updated);
         }
       } else {
         final savedPath = await DatabaseService.savePhoto(
             File(photo.path), 'after_${session.id}');
-        final updated = session.copyWith(afterPhotoPath: savedPath);
+        final updated = NailSession(
+          id: session.id,
+          clientId: session.clientId,
+          beforePhotoPath: session.beforePhotoPath,
+          tryOnPhotoPath: session.tryOnPhotoPath,
+          afterPhotoPath: savedPath,
+          note: session.note,
+          price: session.price,
+          serviceName: session.serviceName,
+          createdAt: session.createdAt,
+        );
         await DatabaseService.updateSession(updated);
       }
     }
@@ -635,7 +752,17 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     );
     if (ok == true) {
       final value = double.tryParse(controller.text.trim());
-      final updated = session.copyWith(price: value);
+      final updated = NailSession(
+        id: session.id,
+        clientId: session.clientId,
+        beforePhotoPath: session.beforePhotoPath,
+        tryOnPhotoPath: session.tryOnPhotoPath,
+        afterPhotoPath: session.afterPhotoPath,
+        note: session.note,
+        price: value,
+        serviceName: session.serviceName,
+        createdAt: session.createdAt,
+      );
       await DatabaseService.updateSession(updated);
       _loadSessions();
     }
@@ -667,8 +794,16 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
       ),
     );
     if (ok == true) {
-      final updated = session.copyWith(
+      final updated = NailSession(
+        id: session.id,
+        clientId: session.clientId,
+        beforePhotoPath: session.beforePhotoPath,
+        tryOnPhotoPath: session.tryOnPhotoPath,
+        afterPhotoPath: session.afterPhotoPath,
         note: controller.text.trim().isEmpty ? null : controller.text.trim(),
+        price: session.price,
+        serviceName: session.serviceName,
+        createdAt: session.createdAt,
       );
       await DatabaseService.updateSession(updated);
       _loadSessions();
@@ -734,10 +869,8 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     if (session.hasTryOn) available.add('tryon');
     if (session.hasAfter) available.add('after');
 
-    // Менее 2 фото — вообще не должно быть (кнопка неактивна)
     if (available.length < 2) return;
 
-    // Ровно 2 фото — автовыбор, без диалога
     if (available.length == 2) {
       if (mounted) {
         Navigator.push(
@@ -751,7 +884,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
       return;
     }
 
-    // 3 фото — мастер выбирает вариант из 4 карточек
     final selected = await _showVideoVariantDialog(session);
     if (selected == null) return;
     if (mounted) {
@@ -767,7 +899,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
 
   // ============ АВТО-ПРЕДЛОЖЕНИЕ ВИДЕО ============
 
-  /// Показывает диалог "Сделать видео?" после сохранения фото "после"
   Future<void> _suggestVideo(NailSession session) async {
     if (!mounted) return;
 
@@ -808,7 +939,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     }
   }
 
-  /// Диалог с 4 вариантами клипа (с превью фото)
   Future<List<String>?> _showVideoVariantDialog(NailSession session) async {
     final options = <Map<String, dynamic>>[];
 
@@ -850,7 +980,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
       });
     }
 
-    // Если только одна опция — сразу возвращаем её
     if (options.length == 1) {
       return options[0]['types'] as List<String>;
     }
@@ -885,8 +1014,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     );
   }
 
-  /// Карточка варианта видео: миниатюры СВЕРХУ, текст СНИЗУ на всю ширину —
-  /// ничего не зажимается даже с 3 фото
   Widget _variantCard({
     required String title,
     required String subtitle,
@@ -912,7 +1039,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Мини-превью фото сверху
               Row(
                 children: [
                   ...paths.asMap().entries.map((e) {
@@ -934,7 +1060,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
                 ],
               ),
               const SizedBox(height: 8),
-              // Текст на всю ширину — никогда не зажимается
               Text(title,
                   style: const TextStyle(
                       fontSize: 16, fontWeight: FontWeight.bold)),
@@ -952,7 +1077,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     );
   }
 
-  /// Все сообщения — СВЕРХУ (не закрывают нижние кнопки)
   void _snack(String text, Color bg) {
     if (mounted) {
       TopMessage.show(context, text, color: bg);
@@ -990,7 +1114,6 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
           ),
           child: Column(
             children: [
-              // ============ ШАПКА КЛИЕНТА ============
               Container(
                 width: double.infinity,
                 padding: EdgeInsets.all(Responsive.pad(context)),
@@ -1245,12 +1368,14 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
               children: [
                 Expanded(
                   child: _buildPhotoColumn('До', session.hasBefore,
-                      session.beforePhotoPath, session, 'before', null),
+                      session.beforePhotoPath, session, 'before',
+                      () => _addBeforePhoto(session)),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: _buildPhotoColumn('Примерка', session.hasTryOn,
-                      session.tryOnPhotoPath, session, 'tryon', null),
+                      session.tryOnPhotoPath, session, 'tryon',
+                      () => _addTryOnPhoto(session)),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -1341,22 +1466,30 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
                             border: Border.all(color: Colors.pink, width: 2),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.photo_library,
-                                  color: Colors.pink, size: 36),
-                              SizedBox(height: 8),
-                              Text(
-                                '📸 Сделайте фото\nили выберите\nиз галереи',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Colors.pink,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(6),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
+                                children: const [
+                                  Icon(Icons.photo_library,
+                                      color: Colors.pink, size: 30),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    'Добавить\nфото',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Colors.pink,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      height: 1.2,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
                         ),
                       )

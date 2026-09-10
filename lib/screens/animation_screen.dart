@@ -54,13 +54,12 @@ class _AnimationScreenState extends State<AnimationScreen>
     _selectedGroup = _isTrendTemplate(_template) ? '🔥 Тренды' : '📼 Классика';
   }
 
-  bool _isTrendTemplate(VideoTemplate t) {
+    bool _isTrendTemplate(VideoTemplate t) {
     return [
       VideoTemplate.splitScreen,
       VideoTemplate.reveal,
       VideoTemplate.magazine,
       VideoTemplate.reels,
-      VideoTemplate.cinematic,
     ].contains(t);
   }
 
@@ -311,13 +310,12 @@ class _AnimationScreenState extends State<AnimationScreen>
   }
 
   List<VideoTemplate> _getTemplatesForGroup(String group) {
-    if (group == '🔥 Тренды') {
+        if (group == '🔥 Тренды') {
       return [
         VideoTemplate.splitScreen,
         VideoTemplate.reveal,
         VideoTemplate.magazine,
         VideoTemplate.reels,
-        VideoTemplate.cinematic,
       ];
     } else {
       return [

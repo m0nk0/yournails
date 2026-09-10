@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../models/nail_color.dart';
 import '../library/unified_library_service.dart';
 import '../services/trend_palettes_service.dart';
+import '../utils/top_message.dart';
 import 'color_mixer_screen.dart';
+import 'color_from_photo_screen.dart';
 
 /// Экран выбора цвета.
 /// Классика: вкладки групп из Единой Библиотеки (динамически) + «Мои цвета».
@@ -24,6 +26,7 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
 
   /// ID вкладок в порядке: all → группы по канону → my
   List<String> _tabs = [];
+  int _tabIndex = 0;
   bool _loading = true;
 
   // Режим: false = классика (вкладки), true = тренды (палитры)
@@ -77,20 +80,31 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
     for (final g in available) {
       if (g != 'my' && !ordered.contains(g)) ordered.add(g);
     }
-    final tabs = <String>[
-      'all',
-      ...ordered,
-      if (available.contains('my')) 'my',
-    ];
+    // «Мои цвета» ВСЕГДА в конце (даже пустые): состав вкладок стабилен,
+    // поэтому TabController создаётся один раз и никогда не пересоздаётся.
+    // Именно пересоздание контроллера ломало TabBarView (overflow 99895 px).
+    final tabs = <String>['all', ...ordered, 'my'];
 
-    _tabController?.dispose();
+    // Контроллер создаём ОДИН раз, до setState с _loading = false
+    if (_tabController == null) {
+      _tabController = TabController(length: tabs.length, vsync: this);
+      _tabController!.addListener(_onTabChanged);
+    }
+
     if (!mounted) return;
     setState(() {
       _allColors = colors;
       _tabs = tabs;
-      _tabController = TabController(length: tabs.length, vsync: this);
       _loading = false;
     });
+  }
+
+  void _onTabChanged() {
+    if (mounted) {
+      setState(() {
+        _tabIndex = _tabController?.index ?? 0;
+      });
+    }
   }
 
   @override
@@ -113,6 +127,22 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
     if (res != null && res is NailColor) {
       UnifiedLibraryService.invalidateCache();
       if (mounted) Navigator.pop(context, res);
+    }
+  }
+
+  /// Открыть «Цвет из фото»: сохранение происходит внутри,
+  /// сюда возвращается уже готовый цвет
+  Future<void> _openColorFromPhoto() async {
+    final res = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ColorFromPhotoScreen()),
+    );
+    if (res != null && res is NailColor) {
+      await _load();
+      if (mounted) {
+        TopMessage.show(context, 'Цвет «${res.name}» — в Моих цветах',
+            color: Colors.green);
+      }
     }
   }
 
@@ -253,6 +283,13 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
     }
   }
 
+  bool get _isMyColorsTab =>
+      !_loading &&
+      !_isTrendsMode &&
+      _tabController != null &&
+      _tabs.isNotEmpty &&
+      _tabs[_tabIndex] == 'my';
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -307,7 +344,7 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
         children: [
           // === ПЕРЕКЛЮЧАТЕЛЬ: Классика / Тренды ===
           Container(
-            color: Theme.of(context).colorScheme.primary.withOpacity(0.08),
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Row(
               children: [
@@ -394,6 +431,15 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
           ),
         ],
       ),
+      // «+» только на вкладке «Мои цвета» = цвет из фото
+      floatingActionButton: _isMyColorsTab
+          ? FloatingActionButton(
+              onPressed: _openColorFromPhoto,
+              backgroundColor: Colors.pink,
+              tooltip: 'Цвет из фото',
+              child: const Icon(Icons.add, color: Colors.white, size: 32),
+            )
+          : null,
     );
   }
 
@@ -409,7 +455,9 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
             child: Padding(
               padding: const EdgeInsets.all(32),
               child: Text(
-                'Пока пусто.\nСмешайте цвет (иконка 🧪 сверху) и сохраните в «Мои цвета».',
+                g == 'my'
+                    ? 'Пока пусто.\nСмешай цвет (🎨 Миксер сверху)\nили добавь из фото (+ снизу).'
+                    : 'Пока пусто.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 16, color: Colors.grey[600]),
               ),
@@ -450,7 +498,7 @@ class _ColorPickerScreenState extends State<ColorPickerScreen>
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.08),
+              color: Colors.black.withValues(alpha: 0.08),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),

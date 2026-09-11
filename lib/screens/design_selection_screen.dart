@@ -222,6 +222,8 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
     }
   }
 
+  /// Пикер узора возвращает PatternPickResult — узор И/ИЛИ картинка-узор.
+  /// Обработка обоих вариантов: векторный узор и/или картинка (в т.ч. сброс).
   Future<void> _openPatternPicker() async {
     final result = await Navigator.push(
       context,
@@ -229,11 +231,12 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
         builder: (_) => PatternPickerScreen(
           currentPattern: _design.pattern,
           previewColor: _design.color?.color ?? Colors.pink,
+          currentImagePath: _design.patternPath,
         ),
       ),
     );
 
-    if (result != null && result is NailPattern) {
+    if (result != null && result is PatternPickResult) {
       setState(() {
         _design = SelectedDesign(
           color: _design.color,
@@ -241,9 +244,9 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
           shape: _design.shape,
           density: _design.density,
           brightness: _design.brightness,
-          pattern: result,
-          patternPath: _design.patternPath,
-          patternName: _design.patternName,
+          pattern: result.pattern,
+          patternPath: result.imagePath,
+          patternName: result.imageName,
         );
       });
     }
@@ -358,10 +361,14 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
                     _buildSelectionCard(
                       icon: Icons.auto_awesome,
                       title: 'Рисунок',
-                      subtitle: NailPattern.getTypeName(_design.pattern.type),
-                      color: _design.pattern.isNone
-                          ? Colors.grey[300]!
-                          : _design.pattern.color,
+                      subtitle: _design.patternName != null
+                          ? '🖼 ${_design.patternName}'
+                          : NailPattern.getTypeName(_design.pattern.type),
+                      color: _design.patternName != null
+                          ? Colors.pink[100]!
+                          : (_design.pattern.isNone
+                              ? Colors.grey[300]!
+                              : _design.pattern.color),
                       onTap: _openPatternPicker,
                     ),
                   ],

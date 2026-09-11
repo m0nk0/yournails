@@ -12,6 +12,9 @@ import 'socket_groove.dart';
 ///
 /// Анатомия (координаты painter'а): НИЗ ногтя = кутикула (скруглён),
 /// ВЕРХ = свободный край (торец). Тень валика — внизу, свет ловит торец.
+///
+/// PNG-узор (patternImage) рисуется ВНУТРИ: после векторного узора,
+/// но ДО бликов и глянца — принт лежит под топом, 3D не теряется.
 class RealisticNailPainter extends CustomPainter {
   final SelectedDesign design;
   final double width;
@@ -19,12 +22,16 @@ class RealisticNailPainter extends CustomPainter {
   final bool showNail;
   final bool showCuticle;
 
+  /// Декодированная картинка узора (слайдер/принт). null = без картинки.
+  final ui.Image? patternImage;
+
   const RealisticNailPainter({
     required this.design,
     required this.width,
     required this.height,
     this.showNail = true,
     this.showCuticle = true,
+    this.patternImage,
   });
 
   @override
@@ -126,6 +133,19 @@ class RealisticNailPainter extends CustomPainter {
     // Слой 5: паттерн
     if (design.hasPatternDraw) {
       NailPatternPainter(design.pattern).paint(canvas, size);
+    }
+
+    // ============ Слой 5.5: PNG-УЗОР (слайдер/принт) ============
+    // Рисуется ВНУТРИ клипа, ДО бликов: принт лежит под топом,
+    // купол и блики живут поверх — ноготь остаётся объёмным.
+    if (patternImage != null) {
+      canvas.drawImageRect(
+        patternImage!,
+        Rect.fromLTWH(
+            0, 0, patternImage!.width.toDouble(), patternImage!.height.toDouble()),
+        Rect.fromLTWH(0, 0, w, h),
+        Paint(),
+      );
     }
 
     // ============ Слой 6: ЖИВОЙ БЛИК ============
@@ -241,6 +261,7 @@ class RealisticNailPainter extends CustomPainter {
         oldDelegate.width != width ||
         oldDelegate.height != height ||
         oldDelegate.showNail != showNail ||
-        oldDelegate.showCuticle != showCuticle;
+        oldDelegate.showCuticle != showCuticle ||
+        oldDelegate.patternImage != patternImage;
   }
 }

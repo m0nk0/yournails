@@ -1,13 +1,19 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+
 import '../models/selected_design.dart';
 import '../models/nail_shape.dart';
 import '../painters/nail_path.dart';
 import '../painters/realistic_nail_painter.dart';
 
-/// Рендер ногтя: реалистичный painter + PNG-паттерны поверх.
+/// Рендер ногтя: реалистичный painter, PNG-узор встроен ВНУТРЬ него
+/// (рисуется под бликами и глянцем — как принт под топом).
+/// Больше никакого верхнего оверлея, убивающего 3D.
 /// Слои можно отключать: showNail / showCuticle.
-class Nail3DRenderer extends StatelessWidget {
+class Nail3DRenderer extends StatefulWidget {
   final SelectedDesign design;
   final double width;
   final double height;
@@ -24,47 +30,100 @@ class Nail3DRenderer extends StatelessWidget {
   });
 
   @override
+  State<Nail3DRenderer> createState() => _Nail3DRendererState();
+}
+
+class _Nail3DRendererState extends State<Nail3DRenderer> {
+  ui.Image? _patternImage;
+  String? _loadedPath;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPattern();
+  }
+
+  @override
+  void didUpdateWidget(covariant Nail3DRenderer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.design.patternPath != widget.design.patternPath) {
+      _loadPattern();
+    }
+  }
+
+  @override
+  void dispose() {
+    _patternImage?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadPattern() async {
+    final path = widget.design.patternPath;
+
+    // Узора нет — сбрасываем картинку
+    if (path == null || !widget.design.hasPattern) {
+      if (_patternImage != null || _loadedPath != null) {
+        setState(() {
+          _patternImage?.dispose();
+          _patternImage = null;
+          _loadedPath = null;
+        });
+      }
+      return;
+    }
+
+    // Уже загружено именно это фото — не передекодируем
+    if (path == _loadedPath) return;
+
+    try {
+      final file = File(path);
+      if (!await file.exists()) return;
+      final bytes = await file.readAsBytes();
+      final completer = Completer<ui.Image>();
+      ui.decodeImageFromList(bytes, (i) => completer.complete(i));
+      final img = await completer.future;
+      if (!mounted) return;
+      setState(() {
+        _patternImage?.dispose();
+        _patternImage = img;
+        _loadedPath = path;
+      });
+    } catch (_) {
+      // Файл узора недоступен — рисуем без него, без краха
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: width,
-      height: height,
+      width: widget.width,
+      height: widget.height,
       child: Stack(
         children: [
           // Тень по контуру ногтя (амбиент + направленная)
-          if (showNail && design.shadowIntensity > 0)
+          if (widget.showNail && widget.design.shadowIntensity > 0)
             Positioned.fill(
               child: CustomPaint(
                 painter: NailShadowPainter(
-                  shape: design.shape,
-                  intensity: design.shadowIntensity,
+                  shape: widget.design.shape,
+                  intensity: widget.design.shadowIntensity,
                 ),
               ),
             ),
 
+          // Ноготь со всеми слоями; PNG-узор передаётся ВНУТРЬ painter
           Positioned.fill(
             child: CustomPaint(
               painter: RealisticNailPainter(
-                design: design,
-                width: width,
-                height: height,
-                showNail: showNail,
-                showCuticle: showCuticle,
+                design: widget.design,
+                width: widget.width,
+                height: widget.height,
+                showNail: widget.showNail,
+                showCuticle: widget.showCuticle,
+                patternImage: _patternImage,
               ),
             ),
           ),
-
-          // PNG-паттерн поверх, обрезанный по форме ногтя
-          if (showNail && design.hasPattern && design.patternPath != null)
-            Positioned.fill(
-              child: ClipPath(
-                clipper: NailPathClipper(design.shape),
-                child: Image.file(
-                  File(design.patternPath!),
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                ),
-              ),
-            ),
         ],
       ),
     );

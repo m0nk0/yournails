@@ -1,14 +1,98 @@
 // lib/screens/home_screen.dart
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+
 import 'camera_screen.dart';
+import 'edit_screen.dart';
 import 'my_designs_screen.dart';
 import 'manage_masters_screen.dart';
 import 'crm_screen.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import '../services/tryon_session_service.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
+
+  /// Тап по «Примерке»: если есть сохранённая сессия — предлагаем
+  /// продолжить её или начать новую. Иначе — сразу камера.
+  Future<void> _openTryOn(BuildContext context) async {
+    final session = await TryOnSessionService.load();
+
+    // Сессии нет — обычный вход через камеру
+    if (session == null) {
+      _pushCamera(context);
+      return;
+    }
+
+    // Файл фото мог исчезнуть (чистка системы) — считаем сессию битой
+    final file = File(session.photoPath);
+    if (!await file.exists()) {
+      await TryOnSessionService.clear();
+      _pushCamera(context);
+      return;
+    }
+
+    final months = [
+      'янв', 'фев', 'мар', 'апр', 'мая', 'июн',
+      'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'
+    ];
+    final d = session.savedAt;
+    final when = '${d.day} ${months[d.month - 1]}, '
+        '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+
+    final continueSession = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Продолжить примерку?',
+            style: TextStyle(fontSize: 20)),
+        content: Text(
+          'Есть сохранённая примерка от $when.\n\n'
+          'Продолжить её или начать новую?',
+          style: const TextStyle(fontSize: 16),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Начать новую', style: TextStyle(fontSize: 16)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.pink,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Продолжить', style: TextStyle(fontSize: 16)),
+          ),
+        ],
+      ),
+    );
+
+    // Закрыл диалог без выбора — ничего не делаем
+    if (continueSession == null) return;
+
+    if (continueSession) {
+      if (context.mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => EditScreen(imageFile: file, restored: session),
+          ),
+        );
+      }
+    } else {
+      await TryOnSessionService.clear();
+      if (context.mounted) _pushCamera(context);
+    }
+  }
+
+  void _pushCamera(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CameraScreen()),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,10 +160,7 @@ class HomeScreen extends StatelessWidget {
                       title: 'Примерка',
                       icon: Icons.camera_alt,
                       color: Colors.pink,
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const CameraScreen()),
-                      ),
+                      onTap: () => _openTryOn(context),
                     ),
                     const SizedBox(height: 14),
 

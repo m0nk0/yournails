@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../models/nail_color.dart';
 import '../models/nail_material.dart';
@@ -9,6 +10,7 @@ import '../models/nail_pattern.dart';
 import '../models/my_design.dart';
 import '../services/database_service.dart';
 import '../library/unified_library_service.dart';
+import '../utils/chroma_key.dart';
 import '../utils/responsive.dart';
 import '../widgets/nail_3d_renderer.dart';
 import 'color_picker_screen.dart';
@@ -104,6 +106,7 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
     }
   }
 
+  /// Загрузка своей картинки-дизайна (PNG/фото) с опцией chroma-key
   Future<void> _uploadImage() async {
     final source = await showDialog<ImageSource>(
       context: context,
@@ -115,11 +118,15 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
             ListTile(
               leading: const Icon(Icons.photo_library, size: 28),
               title: const Text('Из галереи', style: TextStyle(fontSize: 18)),
+              subtitle: const Text('PNG с прозрачностью = слайдер-дизайн',
+                  style: TextStyle(fontSize: 12)),
               onTap: () => Navigator.pop(context, ImageSource.gallery),
             ),
             ListTile(
               leading: const Icon(Icons.camera_alt, size: 28),
               title: const Text('Сделать фото', style: TextStyle(fontSize: 18)),
+              subtitle: const Text('фото ляжет как принт',
+                  style: TextStyle(fontSize: 12)),
               onTap: () => Navigator.pop(context, ImageSource.camera),
             ),
           ],
@@ -133,31 +140,63 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
     if (photo == null) return;
 
     final nameController = TextEditingController(text: 'Мой дизайн');
+    bool chroma = false;
     final ok = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Название дизайна', style: TextStyle(fontSize: 20)),
-        content: TextField(
-          controller: nameController,
-          decoration: const InputDecoration(labelText: 'Название'),
-          autofocus: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Название дизайна', style: TextStyle(fontSize: 20)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(labelText: 'Название'),
+                autofocus: true,
+              ),
+              const SizedBox(height: 4),
+              CheckboxListTile(
+                value: chroma,
+                onChanged: (v) =>
+                    setDialogState(() => chroma = v ?? false),
+                title: const Text('Убрать белый фон',
+                    style: TextStyle(fontSize: 15)),
+                subtitle: const Text(
+                  'для JPG/PNG без прозрачности',
+                  style: TextStyle(fontSize: 12),
+                ),
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Отмена'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Сохранить'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Сохранить'),
-          ),
-        ],
       ),
     );
 
     if (ok == true && nameController.text.trim().isNotEmpty) {
+      // Chroma-key: белый фон убирается ОДИН РАЗ при импорте
+      File sourceFile = File(photo.path);
+      if (chroma) {
+        final bytes = await ChromaKey.removeWhiteBackground(
+            await File(photo.path).readAsBytes());
+        final tmp =
+            File('${(await getTemporaryDirectory()).path}/chroma_tmp.png');
+        await tmp.writeAsBytes(bytes);
+        sourceFile = tmp;
+      }
       final savedPath =
-          await DatabaseService.savePhoto(File(photo.path), 'pattern');
+          await DatabaseService.savePhoto(sourceFile, 'pattern');
       await DatabaseService.addMyDesign(MyDesign(
         id: const Uuid().v4(),
         name: nameController.text.trim(),
@@ -168,6 +207,16 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
       setState(() {
         _myDesigns = DatabaseService.getMyDesigns();
       });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(chroma
+                ? 'Дизайн сохранён (белый фон убран)'
+                : 'Дизайн сохранён'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     }
   }
 

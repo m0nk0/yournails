@@ -47,6 +47,10 @@ class TryOnSession {
   final int cuticleTone;
   final int? cuticleColorValue;
 
+  // Узор (прозрачность и масштаб мотива)
+  final double patternOpacity;
+  final double patternScale;
+
   final DateTime savedAt;
 
   TryOnSession({
@@ -76,6 +80,8 @@ class TryOnSession {
     required this.cuticleLength,
     required this.cuticleTone,
     this.cuticleColorValue,
+    required this.patternOpacity,
+    required this.patternScale,
     required this.savedAt,
   });
 
@@ -103,6 +109,8 @@ class TryOnSession {
       cuticleLength: cuticleLength,
       cuticleTone: cuticleTone,
       cuticleColor: cuticleColorValue != null ? Color(cuticleColorValue!) : null,
+      patternOpacity: patternOpacity,
+      patternScale: patternScale,
     );
   }
 
@@ -134,6 +142,8 @@ class TryOnSession {
       'cuticleLength': cuticleLength,
       'cuticleTone': cuticleTone,
       'cuticleColorValue': cuticleColorValue,
+      'patternOpacity': patternOpacity,
+      'patternScale': patternScale,
       'savedAt': savedAt.toIso8601String(),
     };
   }
@@ -166,6 +176,9 @@ class TryOnSession {
       cuticleLength: (json['cuticleLength'] as num?)?.toDouble() ?? 0.8,
       cuticleTone: (json['cuticleTone'] as num?)?.toInt() ?? 1,
       cuticleColorValue: (json['cuticleColorValue'] as num?)?.toInt(),
+      // Новые поля: дефолт 1.0 — старые сессии (без этих полей) работают корректно
+      patternOpacity: (json['patternOpacity'] as num?)?.toDouble() ?? 1.0,
+      patternScale: (json['patternScale'] as num?)?.toDouble() ?? 1.0,
       savedAt: json['savedAt'] != null
           ? DateTime.parse(json['savedAt'] as String)
           : DateTime.now(),

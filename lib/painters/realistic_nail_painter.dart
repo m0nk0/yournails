@@ -15,6 +15,8 @@ import 'socket_groove.dart';
 ///
 /// PNG-узор (patternImage) рисуется ВНУТРИ: после векторного узора,
 /// но ДО бликов и глянца — принт лежит под топом, 3D не теряется.
+/// Прозрачность (design.patternOpacity) и масштаб мотива (design.patternScale)
+/// применяются и к PNG, и к векторному узору.
 class RealisticNailPainter extends CustomPainter {
   final SelectedDesign design;
   final double width;
@@ -96,8 +98,6 @@ class RealisticNailPainter extends CustomPainter {
     }
 
     // ============ Слой 3: ПРОДОЛЬНАЯ АРКА (анатомически верная) ============
-    // ВНИЗУ (кутикула) — тень кожного валика, нарастает к краю.
-    // ВВЕРХУ — тонкая глубина под светлой линией торца, середина светлая.
     if (e > 0) {
       final d = 0.50 * e;
       final arch = Paint()
@@ -130,21 +130,45 @@ class RealisticNailPainter extends CustomPainter {
       );
     canvas.drawRect(Rect.fromLTWH(0, 0, w, h), glow);
 
-    // Слой 5: паттерн
+    // ============ Слой 5: ВЕКТОРНЫЙ УЗОР (с прозрачностью) ============
     if (design.hasPatternDraw) {
-      NailPatternPainter(design.pattern).paint(canvas, size);
+      final patOpacity = design.patternOpacity.clamp(0.0, 1.0);
+      canvas.save();
+      if (patOpacity < 1.0) {
+        // Рисуем узор во временный слой с нужной прозрачностью
+        canvas.saveLayer(
+          Rect.fromLTWH(0, 0, w, h),
+          Paint()..color = Color.fromRGBO(255, 255, 255, patOpacity),
+        );
+        NailPatternPainter(design.pattern).paint(canvas, size);
+        canvas.restore();
+      } else {
+        NailPatternPainter(design.pattern).paint(canvas, size);
+      }
+      canvas.restore();
     }
 
     // ============ Слой 5.5: PNG-УЗОР (слайдер/принт) ============
     // Рисуется ВНУТРИ клипа, ДО бликов: принт лежит под топом,
     // купол и блики живут поверх — ноготь остаётся объёмным.
+    // Прозрачность и центрированное масштабирование из design.
     if (patternImage != null) {
+      final patOpacity = design.patternOpacity.clamp(0.0, 1.0);
+      final patScale = design.patternScale.clamp(0.5, 2.0);
+
+      // Центрированное масштабирование: dst-прямоугольник больше ногтя,
+      // обрезается клипом по форме. Узор растёт из центра.
+      final dstW = w * patScale;
+      final dstH = h * patScale;
+      final dstX = (w - dstW) / 2;
+      final dstY = (h - dstH) / 2;
+
       canvas.drawImageRect(
         patternImage!,
         Rect.fromLTWH(
             0, 0, patternImage!.width.toDouble(), patternImage!.height.toDouble()),
-        Rect.fromLTWH(0, 0, w, h),
-        Paint(),
+        Rect.fromLTWH(dstX, dstY, dstW, dstH),
+        Paint()..color = Color.fromRGBO(255, 255, 255, patOpacity),
       );
     }
 

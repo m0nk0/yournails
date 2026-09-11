@@ -35,6 +35,10 @@ class SelectedDesign {
   final int cuticleTone;      // 0..3: тон кожи
   final Color? cuticleColor;  // цвет кожи клиента с фото (приоритетнее tone)
 
+  // Узор (векторный и PNG-картинка): прозрачность и размер мотива
+  final double patternOpacity; // 0..1: 0 = едва видно, 1 = наглухо
+  final double patternScale;   // 0.5..2: 1 = исходный размер картинки
+
   SelectedDesign({
     this.color,
     this.material,
@@ -52,6 +56,8 @@ class SelectedDesign {
     this.cuticleLength = 0.8,
     this.cuticleTone = 1,
     this.cuticleColor,
+    this.patternOpacity = 1.0,
+    this.patternScale = 1.0,
   });
 
   bool get hasColor => color != null;
@@ -94,6 +100,8 @@ class SelectedDesign {
     int? cuticleTone,
     Color? cuticleColor,
     bool clearCuticleColor = false,
+    double? patternOpacity,
+    double? patternScale,
   }) {
     return SelectedDesign(
       color: color ?? this.color,
@@ -114,6 +122,8 @@ class SelectedDesign {
       cuticleColor: clearCuticleColor
           ? null
           : (cuticleColor ?? this.cuticleColor),
+      patternOpacity: patternOpacity ?? this.patternOpacity,
+      patternScale: patternScale ?? this.patternScale,
     );
   }
 

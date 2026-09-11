@@ -68,6 +68,10 @@ class _EditScreenState extends State<EditScreen> {
   int _cuticleTone = 1;
   Color? _cuticleColor; // пипетка — цвет кожи клиента
 
+  // Узор: прозрачность и размер мотива (PNG и векторный)
+  double _patternOpacity = 1.0;
+  double _patternScale = 1.0;
+
   // Режим пипетки (тап по фото → взять цвет)
   bool _pickingCuticle = false;
 
@@ -75,7 +79,7 @@ class _EditScreenState extends State<EditScreen> {
   ui.Image? _photoImage;
   Rect? _photoRect; // где фото рисуется на экране (для пересчёта координат)
 
-  // Режим панели: 0 = базовый, 1 = 3D, 2 = кутикула, 3 = формы
+  // Режим панели: 0 = базовый, 1 = 3D, 2 = кутикула, 3 = формы, 4 = узор
   int _mode = 0;
 
   // Рамка
@@ -86,6 +90,7 @@ class _EditScreenState extends State<EditScreen> {
 
   // Слои (как в фотошопе)
   bool _showNailLayer = true;
+  bool _showPatternLayer = true;
   bool _showCuticleLayer = true;
   bool _showBgLayer = true;
   bool _lockNail = false;
@@ -134,6 +139,8 @@ class _EditScreenState extends State<EditScreen> {
     _cuticleLength = design.cuticleLength;
     _cuticleTone = design.cuticleTone;
     _cuticleColor = design.cuticleColor;
+    _patternOpacity = design.patternOpacity;
+    _patternScale = design.patternScale;
 
     _selectedDesign = design;
     _sessionPhotoPath = s.photoPath;
@@ -188,6 +195,8 @@ class _EditScreenState extends State<EditScreen> {
       cuticleLength: _cuticleLength,
       cuticleTone: _cuticleTone,
       cuticleColorValue: _cuticleColor?.toARGB32(),
+      patternOpacity: _patternOpacity,
+      patternScale: _patternScale,
       savedAt: DateTime.now(),
     );
     // fire-and-forget: сохранение не должно тормозить UI
@@ -316,6 +325,35 @@ class _EditScreenState extends State<EditScreen> {
       cuticleLength: _cuticleLength,
       cuticleTone: _cuticleTone,
       cuticleColor: _cuticleColor,
+      patternOpacity: _patternOpacity,
+      patternScale: _patternScale,
+    );
+  }
+
+  /// Дизайн для ПРЕВЬЮ: слой «Узор» выключен = узор не показываем
+  /// (в экспорт и сессию идут полные параметры)
+  SelectedDesign _previewDesign() {
+    final base = _buildCurrentDesign();
+    if (_showPatternLayer) return base;
+    return SelectedDesign(
+      color: base.color,
+      material: base.material,
+      shape: base.shape,
+      density: base.density,
+      brightness: base.brightness,
+      pattern: const NailPattern(),
+      patternPath: null,
+      patternName: base.patternName,
+      edgeDarken: base.edgeDarken,
+      highlightIntensity: base.highlightIntensity,
+      shadowIntensity: base.shadowIntensity,
+      cuticleWidth: base.cuticleWidth,
+      cuticleDepth: base.cuticleDepth,
+      cuticleLength: base.cuticleLength,
+      cuticleTone: base.cuticleTone,
+      cuticleColor: base.cuticleColor,
+      patternOpacity: base.patternOpacity,
+      patternScale: base.patternScale,
     );
   }
 
@@ -343,6 +381,8 @@ class _EditScreenState extends State<EditScreen> {
         _cuticleLength = result.cuticleLength;
         _cuticleTone = result.cuticleTone;
         _cuticleColor = result.cuticleColor;
+        _patternOpacity = result.patternOpacity;
+        _patternScale = result.patternScale;
       });
       _persistSession();
     }
@@ -383,6 +423,8 @@ class _EditScreenState extends State<EditScreen> {
       cuticleLength: _cuticleLength,
       cuticleTone: _cuticleTone,
       cuticleColor: _cuticleColor,
+      patternOpacity: _patternOpacity,
+      patternScale: _patternScale,
     );
 
     Navigator.push(
@@ -409,7 +451,7 @@ class _EditScreenState extends State<EditScreen> {
           if (_hasDesign)
             Positioned.fill(
               child: Nail3DRenderer(
-                design: _buildCurrentDesign(),
+                design: _previewDesign(),
                 width: _frameWidth,
                 height: _frameHeight,
                 showNail: _showNailLayer,
@@ -494,13 +536,14 @@ class _EditScreenState extends State<EditScreen> {
     );
   }
 
-  Widget _modeButton(String label, int mode, {double width = 70}) {
+  /// Чип режима (растягивается на всю ширину ряда через Expanded)
+  Widget _modeButton(String label, int mode) {
+    final compact = Responsive.isCompact(context);
     return GestureDetector(
       onTap: () => setState(() => _mode = _mode == mode ? 0 : mode),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        width: width,
-        height: Responsive.isCompact(context) ? 44 : 50,
+        height: compact ? 42 : 48,
         decoration: BoxDecoration(
           color: _mode == mode ? Colors.pink : Colors.white10,
           borderRadius: BorderRadius.circular(12),
@@ -514,7 +557,7 @@ class _EditScreenState extends State<EditScreen> {
             label,
             style: TextStyle(
               color: Colors.white,
-              fontSize: Responsive.fs(context, 12),
+              fontSize: compact ? 11 : 13,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -565,6 +608,16 @@ class _EditScreenState extends State<EditScreen> {
   @override
   Widget build(BuildContext context) {
     final compact = Responsive.isCompact(context);
+
+    // Подпись большой кнопки дизайна
+    final String designLabel;
+    if (_selectedDesign?.color == null) {
+      designLabel = 'Выбрать дизайн';
+    } else {
+      final matName = _selectedDesign!.material?.name;
+      designLabel = 'Дизайн: ${_selectedDesign!.color!.name}'
+          '${matName != null ? ' • $matName' : ''}';
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFE8E8E8),
@@ -736,6 +789,11 @@ class _EditScreenState extends State<EditScreen> {
                         _layerRow('Рамка', Icons.border_outer, _showFrame, null,
                             () => setState(() => _showFrame = !_showFrame),
                             null),
+                        _layerRow('Узор', Icons.auto_awesome,
+                            _showPatternLayer, null,
+                            () => setState(
+                                () => _showPatternLayer = !_showPatternLayer),
+                            null),
                         _layerRow('Кутикула', Icons.water_drop,
                             _showCuticleLayer, null,
                             () => setState(
@@ -808,37 +866,57 @@ class _EditScreenState extends State<EditScreen> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      onPressed: _openDesignSelection,
-                                      icon: const Icon(Icons.palette, size: 20),
-                                      label: Text(
-                                        _selectedDesign?.color != null
-                                            ? _selectedDesign!.color!.name
-                                            : 'Выбрать дизайн',
-                                        style: TextStyle(
-                                            fontSize: compact ? 13 : 15),
+                              // === БОЛЬШАЯ КНОПКА ДИЗАЙНА ===
+                              SizedBox(
+                                width: double.infinity,
+                                height: compact ? 50 : 56,
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(colors: [
+                                      Color(0xFFE91E63),
+                                      Color(0xFF7B1FA2),
+                                    ]),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: ElevatedButton.icon(
+                                    onPressed: _openDesignSelection,
+                                    icon: Icon(Icons.palette,
+                                        size: compact ? 20 : 24,
+                                        color: Colors.white),
+                                    label: Flexible(
+                                      child: Text(
+                                        designLabel,
                                         overflow: TextOverflow.ellipsis,
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        padding: EdgeInsets.symmetric(
-                                            vertical: compact ? 12 : 14),
-                                        backgroundColor: Colors.pink,
-                                        foregroundColor: Colors.white,
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: compact ? 13 : 15,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.transparent,
+                                      shadowColor: Colors.transparent,
+                                      shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(14)),
+                                    ),
                                   ),
-                                  SizedBox(width: compact ? 6 : 8),
-                                  _modeButton('3D', 1,
-                                      width: compact ? 44 : 52),
-                                  SizedBox(width: compact ? 6 : 8),
-                                  _modeButton('Формы', 3,
-                                      width: compact ? 62 : 70),
-                                  SizedBox(width: compact ? 6 : 8),
-                                  _modeButton('Кутикула', 2,
-                                      width: compact ? 76 : 86),
+                                ),
+                              ),
+                              SizedBox(height: compact ? 6 : 8),
+
+                              // === РЯД РЕЖИМОВ: 4 равных чипа ===
+                              Row(
+                                children: [
+                                  Expanded(child: _modeButton('3D', 1)),
+                                  SizedBox(width: compact ? 4 : 6),
+                                  Expanded(child: _modeButton('Формы', 3)),
+                                  SizedBox(width: compact ? 4 : 6),
+                                  Expanded(
+                                      child: _modeButton('Кутикула', 2)),
+                                  SizedBox(width: compact ? 4 : 6),
+                                  Expanded(child: _modeButton('Узор', 4)),
                                 ],
                               ),
                               const SizedBox(height: 8),
@@ -1052,6 +1130,31 @@ class _EditScreenState extends State<EditScreen> {
                                   ),
                               ],
 
+                              // === РЕЖИМ УЗОР ===
+                              if (_mode == 4) ...[
+                                _groupTitle(
+                                    'Узор: прозрачность и размер',
+                                    Icons.auto_awesome),
+                                _sliderRow(Icons.opacity, 'Прозрачн.',
+                                    _patternOpacity, 0.0, 1.0,
+                                    (v) =>
+                                        setState(() => _patternOpacity = v)),
+                                _sliderRow(Icons.zoom_out_map, 'Размер',
+                                    _patternScale, 0.5, 2.0,
+                                    (v) => setState(() => _patternScale = v)),
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    'Работает для PNG-картинок и векторных узоров',
+                                    style: TextStyle(
+                                      color: Colors.white54,
+                                      fontSize: compact ? 9 : 10,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ),
+                              ],
+
                               // === БАЗОВЫЙ РЕЖИМ ===
                               if (_mode == 0) ...[
                                 if (_hasDesign) ...[
@@ -1095,15 +1198,59 @@ class _EditScreenState extends State<EditScreen> {
                     else
                       Padding(
                         padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _saveAndNext,
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Свёрнутая панель: большая кнопка + Далее
+                            SizedBox(
+                              width: double.infinity,
+                              height: 48,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(colors: [
+                                    Color(0xFFE91E63),
+                                    Color(0xFF7B1FA2),
+                                  ]),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: ElevatedButton.icon(
+                                  onPressed: _openDesignSelection,
+                                  icon: const Icon(Icons.palette,
+                                      size: 20, color: Colors.white),
+                                  label: Flexible(
+                                    child: Text(
+                                      designLabel,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.transparent,
+                                    shadowColor: Colors.transparent,
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(14)),
+                                  ),
+                                ),
+                              ),
                             ),
-                            child: const Text('Далее →'),
-                          ),
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: _saveAndNext,
+                                style: ElevatedButton.styleFrom(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                                child: const Text('Далее →'),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                   ],

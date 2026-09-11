@@ -7,7 +7,9 @@ import 'package:uuid/uuid.dart';
 import '../models/my_design.dart';
 import '../models/nail_pattern.dart';
 import '../models/nail_shape.dart';
+import 'package:path_provider/path_provider.dart';
 import '../services/database_service.dart';
+import '../utils/chroma_key.dart';
 import '../utils/top_message.dart';
 import '../widgets/nail_pattern_layer.dart';
 
@@ -123,31 +125,63 @@ class _PatternPickerScreenState extends State<PatternPickerScreen> {
       if (photo == null) return;
 
       final nameController = TextEditingController(text: 'Моя картинка');
+      bool chroma = false;
       final ok = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Название', style: TextStyle(fontSize: 20)),
-          content: TextField(
-            controller: nameController,
-            decoration: const InputDecoration(labelText: 'Название'),
-            autofocus: true,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Название', style: TextStyle(fontSize: 20)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(labelText: 'Название'),
+                  autofocus: true,
+                ),
+                const SizedBox(height: 4),
+                CheckboxListTile(
+                  value: chroma,
+                  onChanged: (v) =>
+                      setDialogState(() => chroma = v ?? false),
+                  title: const Text('Убрать белый фон',
+                      style: TextStyle(fontSize: 15)),
+                  subtitle: const Text(
+                    'для JPG/PNG без прозрачности',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Отмена'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Сохранить'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Отмена'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Сохранить'),
-            ),
-          ],
         ),
       );
 
       if (ok == true && nameController.text.trim().isNotEmpty) {
+        // Chroma-key: белый фон убирается ОДИН РАЗ при импорте
+        File sourceFile = File(photo.path);
+        if (chroma) {
+          final bytes = await ChromaKey.removeWhiteBackground(
+              await File(photo.path).readAsBytes());
+          final tmp = File(
+              '${(await getTemporaryDirectory()).path}/chroma_tmp.png');
+          await tmp.writeAsBytes(bytes);
+          sourceFile = tmp;
+        }
         final savedPath =
-            await DatabaseService.savePhoto(File(photo.path), 'pattern');
+            await DatabaseService.savePhoto(sourceFile, 'pattern');
         await DatabaseService.addMyDesign(MyDesign(
           id: const Uuid().v4(),
           name: nameController.text.trim(),

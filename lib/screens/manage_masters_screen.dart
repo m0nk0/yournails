@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import '../constants/master_icons.dart';
 import '../models/master.dart';
 import '../services/database_service.dart';
+import '../theme/app_theme.dart';
+import '../utils/top_message.dart';
+import '../widgets/home_app_bar.dart';
 import 'master_onboarding_screen.dart';
 
 /// Экран управления списком мастеров (для студии)
@@ -54,7 +57,8 @@ class _ManageMastersScreenState extends State<ManageMastersScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Удалить мастера?'),
-        content: Text('Мастер "${master.name}" будет удалён без возможности восстановления.'),
+        content: Text(
+            'Мастер "${master.name}" будет удалён без возможности восстановления.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -73,12 +77,8 @@ class _ManageMastersScreenState extends State<ManageMastersScreen> {
       await DatabaseService.deleteMaster(master.id);
       _loadMasters();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Мастер "${master.name}" удалён'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        TopMessage.show(context, 'Мастер "${master.name}" удалён',
+            color: Colors.green);
       }
     }
   }
@@ -86,26 +86,29 @@ class _ManageMastersScreenState extends State<ManageMastersScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Мои мастера'),
-        backgroundColor: Colors.pink,
-        foregroundColor: Colors.white,
+      // AppBar из темы (wine + Unbounded) + бургер-меню через HomeAppBar
+      appBar: const HomeAppBar(
+        title: Text('Мои мастера'),
       ),
       body: _masters.isEmpty
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.people_outline, size: 80, color: Colors.grey[400]),
+                  Icon(Icons.people_outline,
+                      size: 80, color: AppColors.inkSoft),
                   const SizedBox(height: 16),
                   Text(
                     'Пока нет мастеров',
-                    style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                    style: TextStyle(
+                        fontSize: 20,
+                        color: AppColors.ink,
+                        fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Добавьте первого мастера',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                    style: TextStyle(fontSize: 15, color: AppColors.inkSoft),
                   ),
                 ],
               ),
@@ -121,8 +124,9 @@ class _ManageMastersScreenState extends State<ManageMastersScreen> {
             ),
       floatingActionButton: FloatingActionButton(
         onPressed: _addMaster,
-        backgroundColor: Colors.pink,
+        backgroundColor: AppColors.cyan,
         foregroundColor: Colors.white,
+        tooltip: 'Добавить мастера',
         child: const Icon(Icons.add, size: 32),
       ),
     );
@@ -152,12 +156,13 @@ class _ManageMastersScreenState extends State<ManageMastersScreen> {
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
+                        color: AppColors.ink,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       master.isCustomIcon ? 'Свой логотип' : 'Иконка',
-                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                      style: TextStyle(fontSize: 13, color: AppColors.inkSoft),
                     ),
                   ],
                 ),
@@ -165,7 +170,7 @@ class _ManageMastersScreenState extends State<ManageMastersScreen> {
               // Кнопки
               IconButton(
                 onPressed: () => _editMaster(master),
-                icon: const Icon(Icons.edit, color: Colors.pink),
+                icon: const Icon(Icons.edit, color: AppColors.wine),
                 tooltip: 'Редактировать',
               ),
               IconButton(
@@ -189,10 +194,10 @@ class _ManageMastersScreenState extends State<ManageMastersScreen> {
     }
     return CircleAvatar(
       radius: 32,
-      backgroundColor: Colors.pink.withOpacity(0.15),
+      backgroundColor: AppColors.blushDeep,
       child: Icon(
         MasterIcons.getIconByName(master.iconName ?? 'auto_awesome'),
-        color: Colors.pink,
+        color: AppColors.wine,
         size: 32,
       ),
     );

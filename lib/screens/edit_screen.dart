@@ -85,8 +85,9 @@ class _EditScreenState extends State<EditScreen> {
   // Рамка
   bool _showFrame = true;
 
-  // Панель снизу: раскрыта/свёрнута
-  bool _panelOpen = true;
+  // Панель снизу: раскрыта/свёрнута. При входе — свёрнута:
+  // фото во весь рост, управление открывается одним тапом
+  bool _panelOpen = false;
 
   // Слои (как в фотошопе)
   bool _showNailLayer = true;
@@ -96,8 +97,8 @@ class _EditScreenState extends State<EditScreen> {
   bool _lockNail = false;
   bool _lockBg = false;
 
-  // Панель слоёв видима / скрыта
-  bool _layersVisible = true;
+  // Панель слоёв видима / скрыта. При входе — скрыта
+  bool _layersVisible = false;
 
   bool _initialized = false;
 
@@ -123,7 +124,8 @@ class _EditScreenState extends State<EditScreen> {
     _frameCenter = Offset(s.frameCenterDx, s.frameCenterDy);
     _frameWidth = s.frameWidth;
     _frameHeight = s.frameHeight;
-    _rotation = s.rotation;
+    // Старые сессии могли хранить поворот до ±180 — зажимаем в ±90
+    _rotation = s.rotation.clamp(-90.0, 90.0);
     _imageOffset = Offset(s.imageOffsetDx, s.imageOffsetDy);
     _imageScale = s.imageScale;
 
@@ -766,8 +768,9 @@ class _EditScreenState extends State<EditScreen> {
                       color: Colors.black54,
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: Column(
+                       child: Column(
                       mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Align(
                           alignment: Alignment.topRight,
@@ -1174,7 +1177,7 @@ class _EditScreenState extends State<EditScreen> {
                                     (v) => setState(() => _frameHeight = v)),
                                 _sliderRow(Icons.rotate_right,
                                     'Поворот: ${_rotation.toInt()}°', _rotation,
-                                    -180, 180,
+                                    -90, 90,
                                     (v) => setState(() => _rotation = v)),
                               ],
 

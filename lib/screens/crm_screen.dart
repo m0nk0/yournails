@@ -6,6 +6,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/client.dart';
 import '../models/nail_session.dart';
 import '../services/database_service.dart';
+import '../theme/app_theme.dart';
+import '../utils/top_message.dart';
 import '../widgets/home_app_bar.dart';
 import 'client_detail_screen.dart';
 
@@ -222,10 +224,8 @@ class _CrmScreenState extends State<CrmScreen>
 
   void _snack(String text) {
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(text),
-        backgroundColor: Colors.black87,
-      ));
+      TopMessage.show(context, text,
+          color: text.contains('нет телефона') ? Colors.orange : null);
     }
   }
 
@@ -281,6 +281,57 @@ class _CrmScreenState extends State<CrmScreen>
     }
   }
 
+  // ============ БЕЙДЖИ ВКЛАДОК ============
+
+    /// Вкладка: текст + бейдж-пилл со счётчиком. Без иконки и с компактным
+  /// шрифтом — гарантированно влезает в треть ширины экрана;
+  /// FittedBox(scaleDown) страхует совсем узкие экраны.
+  Widget _tabLabel({
+    required String label,
+    int count = 0,
+    bool isAlert = false,
+  }) {
+    // Напоминания с должниками = бирюзовый alert-бейдж, иначе нейтральный
+    final Color badgeColor =
+        isAlert && count > 0 ? AppColors.cyan : Colors.white24;
+    final String countText = count > 99 ? '99+' : '$count';
+
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Container(
+            constraints: const BoxConstraints(minWidth: 22, minHeight: 18),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: badgeColor,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              countText,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                height: 1.1,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ============ BUILD ============
 
   @override
@@ -289,7 +340,7 @@ class _CrmScreenState extends State<CrmScreen>
 
     return Scaffold(
       appBar: HomeAppBar(
-        title: const Text('CRM', style: TextStyle(fontSize: 24)),
+        title: const Text('CRM', style: TextStyle(fontSize: 22)),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings, size: 26),
@@ -300,23 +351,36 @@ class _CrmScreenState extends State<CrmScreen>
       body: Column(
         children: [
           Container(
-            color: Theme.of(context).colorScheme.primary,
-              child: TabBar(
+            color: AppColors.wine,
+            child: TabBar(
               controller: _tab,
               labelColor: Colors.white,
-              unselectedLabelColor: Colors.white70,
-              labelStyle: const TextStyle(
-                  fontSize: 19, fontWeight: FontWeight.w700),
-              unselectedLabelStyle: const TextStyle(
-                  fontSize: 19, fontWeight: FontWeight.w600),
+              unselectedLabelColor: Colors.white.withOpacity(0.7),
               indicator: const UnderlineTabIndicator(
-                borderSide: BorderSide(width: 7.0, color: Colors.white),
+                borderSide: BorderSide(width: 3.0, color: AppColors.cyan),
               ),
-              indicatorSize: TabBarIndicatorSize.label,
-              tabs: [
-                Tab(text: 'Клиенты (${_clients.length})'),
-                Tab(text: 'Напоминания${dueCount > 0 ? ' ($dueCount)' : ''}'),
-                const Tab(text: 'Финансы'),
+              indicatorSize: TabBarIndicatorSize.tab,
+              labelPadding: EdgeInsets.zero,
+                            tabs: [
+                Tab(
+                  child: _tabLabel(
+                    label: 'Клиенты',
+                    count: _clients.length,
+                  ),
+                ),
+                Tab(
+                  child: _tabLabel(
+                    label: 'Напоминания',
+                    count: dueCount,
+                    isAlert: true,
+                  ),
+                ),
+                Tab(
+                  child: _tabLabel(
+                    label: 'Финансы',
+                    count: _allSessions.length,
+                  ),
+                ),
               ],
             ),
           ),
@@ -336,7 +400,7 @@ class _CrmScreenState extends State<CrmScreen>
       floatingActionButton: _tab.index == 0
           ? FloatingActionButton(
               onPressed: _addClient,
-              backgroundColor: Colors.pink,
+              backgroundColor: AppColors.cyan,
               tooltip: 'Новый клиент',
               child: const Icon(Icons.person_add_alt_1,
                   color: Colors.white, size: 28),
@@ -368,7 +432,7 @@ class _CrmScreenState extends State<CrmScreen>
               hintStyle: const TextStyle(fontSize: 16),
               prefixIcon: const Icon(Icons.search, size: 26),
               filled: true,
-              fillColor: Colors.grey[100],
+              fillColor: Colors.white,
               contentPadding:
                   const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
               border: OutlineInputBorder(
@@ -385,20 +449,20 @@ class _CrmScreenState extends State<CrmScreen>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.people_outline,
-                          size: 80, color: Colors.grey[400]),
+                          size: 80, color: AppColors.inkSoft),
                       const SizedBox(height: 12),
                       Text(
                         _clients.isEmpty
                             ? 'Пока нет клиентов'
                             : 'Никого не нашли 😔',
-                        style: const TextStyle(
-                            fontSize: 18, color: Colors.grey),
+                        style: TextStyle(
+                            fontSize: 18, color: AppColors.inkSoft),
                       ),
                       if (_clients.isEmpty) ...[
                         const SizedBox(height: 8),
-                        const Text(
+                        Text(
                           'Нажмите + внизу, чтобы добавить первого',
-                          style: TextStyle(fontSize: 15, color: Colors.grey),
+                          style: TextStyle(fontSize: 15, color: AppColors.inkSoft),
                         ),
                       ],
                     ],
@@ -420,7 +484,7 @@ class _CrmScreenState extends State<CrmScreen>
                         leading: CircleAvatar(
                           radius: 26,
                           backgroundColor:
-                              due ? Colors.orange : Colors.pink,
+                              due ? AppColors.wine : AppColors.navy,
                           child: Text(
                             c.name.isNotEmpty
                                 ? c.name[0].toUpperCase()
@@ -431,7 +495,7 @@ class _CrmScreenState extends State<CrmScreen>
                         ),
                         title: Text(c.name,
                             style: const TextStyle(
-                                fontSize: 19, fontWeight: FontWeight.bold)),
+                                fontSize: 18, fontWeight: FontWeight.bold)),
                         subtitle: Text(
                           '${c.phone ?? 'без телефона'}\n'
                           'Был(а): ${last != null ? _fmtDate(last) : '—'} • '
@@ -440,7 +504,7 @@ class _CrmScreenState extends State<CrmScreen>
                         ),
                         trailing: due
                             ? const Icon(Icons.notifications_active,
-                                color: Colors.orange, size: 26)
+                                color: AppColors.wine, size: 26)
                             : null,
                         onTap: () async {
                           await Navigator.push(
@@ -471,15 +535,16 @@ class _CrmScreenState extends State<CrmScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.check_circle_outline, size: 80, color: Colors.green[300]),
+            Icon(Icons.check_circle_outline,
+                size: 80, color: AppColors.cyan),
             const SizedBox(height: 16),
-            const Text('Всем клиентам недавно писали 🎉',
-                style: TextStyle(fontSize: 20, color: Colors.grey)),
+            Text('Всем клиентам недавно писали 🎉',
+                style: TextStyle(fontSize: 20, color: AppColors.inkSoft)),
             const SizedBox(height: 8),
             Text(
                 'Напоминания появятся через '
                 '${DatabaseService.reminderDays} дней после визита',
-                style: const TextStyle(fontSize: 15, color: Colors.grey)),
+                style: TextStyle(fontSize: 15, color: AppColors.inkSoft)),
           ],
         ),
       );
@@ -510,7 +575,7 @@ class _CrmScreenState extends State<CrmScreen>
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: Colors.orange,
+                        color: AppColors.wine,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text('$days дн.',
@@ -524,7 +589,7 @@ class _CrmScreenState extends State<CrmScreen>
                 const SizedBox(height: 4),
                 Text(
                   'Последний визит: ${_fmtDate(_lastVisit(c)!)}',
-                  style: TextStyle(fontSize: 15, color: Colors.grey[700]),
+                  style: TextStyle(fontSize: 15, color: AppColors.inkSoft),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -536,7 +601,7 @@ class _CrmScreenState extends State<CrmScreen>
                         label: const Text('Написать',
                             style: TextStyle(fontSize: 16)),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
+                          backgroundColor: AppColors.cyan,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 13),
                         ),
@@ -550,8 +615,8 @@ class _CrmScreenState extends State<CrmScreen>
                         label: const Text('Позвонить',
                             style: TextStyle(fontSize: 16)),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.pink,
-                          side: const BorderSide(color: Colors.pink),
+                          foregroundColor: AppColors.wine,
+                          side: const BorderSide(color: AppColors.wine),
                           padding: const EdgeInsets.symmetric(vertical: 13),
                         ),
                       ),
@@ -609,11 +674,11 @@ class _CrmScreenState extends State<CrmScreen>
         Row(
           children: [
             Expanded(
-              child: _statCard('За месяц', _fmtMoney(monthSum), Colors.pink),
+              child: _statCard('За месяц', _fmtMoney(monthSum), AppColors.wine),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: _statCard('Всего', _fmtMoney(totalSum), Colors.deepPurple),
+              child: _statCard('Всего', _fmtMoney(totalSum), AppColors.navy),
             ),
           ],
         ),
@@ -621,11 +686,11 @@ class _CrmScreenState extends State<CrmScreen>
         Row(
           children: [
             Expanded(
-              child: _statCard('Визитов', '${_allSessions.length}', Colors.teal),
+              child: _statCard('Визитов', '${_allSessions.length}', AppColors.cyanDeep),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: _statCard('Средний чек', _fmtMoney(avg), Colors.orange),
+              child: _statCard('Средний чек', _fmtMoney(avg), AppColors.wineSoft),
             ),
           ],
         ),
@@ -652,11 +717,7 @@ class _CrmScreenState extends State<CrmScreen>
                       height: (h as double).clamp(4, 120),
                       margin: const EdgeInsets.symmetric(horizontal: 5),
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFE91E63), Color(0xFF7B1FA2)],
-                          begin: Alignment.bottomCenter,
-                          end: Alignment.topCenter,
-                        ),
+                        gradient: AppGradients.cta,
                         borderRadius: BorderRadius.circular(6),
                       ),
                     ),
@@ -678,7 +739,7 @@ class _CrmScreenState extends State<CrmScreen>
           final c = e.value;
           return ListTile(
             leading: CircleAvatar(
-              backgroundColor: Colors.pink,
+              backgroundColor: AppColors.wine,
               child: Text('${i + 1}',
                   style: const TextStyle(
                       color: Colors.white,
@@ -692,7 +753,7 @@ class _CrmScreenState extends State<CrmScreen>
                 style: const TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.bold,
-                    color: Colors.pink)),
+                    color: AppColors.wine)),
           );
         }),
       ],
@@ -704,7 +765,7 @@ class _CrmScreenState extends State<CrmScreen>
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [color, color.withOpacity(0.7)],
+          colors: [color, color.withOpacity(0.75)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),

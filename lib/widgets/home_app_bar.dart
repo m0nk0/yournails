@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 
-/// Общая шапка с кнопкой "Домой" (возврат на главный экран одним тапом).
-/// Можно дополнительно передать свои actions — они добавятся перед "Домой".
+import 'quick_menu.dart';
+
+/// Общая шапка с бургер-меню быстрых переходов
+/// (Клиенты / Мои дизайны / На главный).
+/// Кнопка «домой» убрана из всех экранов — она живёт внутри меню.
+/// Можно дополнительно передать свои actions — они добавятся перед меню.
 class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
   final Widget title;
   final Color? backgroundColor;
-  final List<Widget>? actions;  // НОВОЕ: дополнительные действия
+  final List<Widget>? actions; // дополнительные действия
 
   const HomeAppBar({
     super.key,
@@ -26,12 +30,8 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
       actions: [
         // Сначала пользовательские действия (если есть)
         if (actions != null) ...actions!,
-        // В конце всегда кнопка "Домой"
-        IconButton(
-          icon: const Icon(Icons.home, size: 28),
-          tooltip: 'На главную',
-          onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
-        ),
+        // В конце всегда бургер-меню: Клиенты / Мои дизайны / На главный
+        const QuickMenuButton(),
       ],
     );
   }

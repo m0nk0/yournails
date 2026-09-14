@@ -15,12 +15,15 @@ import '../models/nail_pattern.dart';
 import '../models/my_design.dart';
 import '../models/nail_session.dart';
 import '../services/database_service.dart';
+import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
 import '../utils/top_message.dart';
 import '../widgets/quick_menu.dart';
 import '../widgets/nail_3d_renderer.dart';
 import '../painters/nail_path.dart';
 import '../painters/realistic_nail_painter.dart';
+import 'client_detail_screen.dart';
+import 'animation_screen.dart';
 
 class ResultScreen extends StatefulWidget {
   final File imageFile;
@@ -102,30 +105,24 @@ class _ResultScreenState extends State<ResultScreen> {
         ).paint(canvas, nailSize);
       }
 
+      // PNG-узор: декодируем и передаём ВНУТРЬ painter — он ляжет
+      // под блики и глянец (правильный z-порядок, как принт под топом)
+      ui.Image? patternImage;
+      if (design.hasPattern && design.patternPath != null) {
+        final pBytes = await File(design.patternPath!).readAsBytes();
+        final pCompleter = Completer<ui.Image>();
+        ui.decodeImageFromList(pBytes, (i) => pCompleter.complete(i));
+        patternImage = await pCompleter.future;
+      }
+
       // Ноготь со всеми 3D-слоями: купол, арка, свечение, блик, глянец,
       // бороздка кутикулы — ровно тот же painter, что и в превью
       RealisticNailPainter(
         design: design,
         width: zone.width,
         height: zone.height,
+        patternImage: patternImage,
       ).paint(canvas, nailSize);
-
-      // PNG-узор поверх, обрезанный по форме ногтя
-      if (design.hasPattern && design.patternPath != null) {
-        final pBytes = await File(design.patternPath!).readAsBytes();
-        final pCompleter = Completer<ui.Image>();
-        ui.decodeImageFromList(pBytes, (i) => pCompleter.complete(i));
-        final pImg = await pCompleter.future;
-        canvas.save();
-        canvas.clipPath(buildNailPath(zone.width, zone.height, design.shape));
-        canvas.drawImageRect(
-          pImg,
-          Rect.fromLTWH(0, 0, pImg.width.toDouble(), pImg.height.toDouble()),
-          Rect.fromLTWH(0, 0, zone.width, zone.height),
-          Paint(),
-        );
-        canvas.restore();
-      }
 
       canvas.restore();
     }
@@ -142,12 +139,16 @@ class _ResultScreenState extends State<ResultScreen> {
     try {
       final bytes = await _renderTryOnImage(withDesign: true);
       await Gal.putImageBytes(bytes);
+      if (mounted) {
+        TopMessage.show(context, 'Сохранено в галерею ✓',
+            color: Colors.green);
+      }
     } catch (e) {
       if (mounted) {
         TopMessage.show(context, 'Ошибка: $e');
       }
     } finally {
-      setState(() => _isSaving = false);
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -160,7 +161,7 @@ class _ResultScreenState extends State<ResultScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('В коллекцию', style: TextStyle(fontSize: 20)),
+        title: const Text('В коллекцию'),
         content: TextField(
           controller: nameController,
           decoration: const InputDecoration(
@@ -197,14 +198,18 @@ class _ResultScreenState extends State<ResultScreen> {
         edgeDarken: design.edgeDarken,
         highlightIntensity: design.highlightIntensity,
         shadowIntensity: design.shadowIntensity,
-        cuticleColor: design.cuticleColor?.value, // ← цвет кожи клиента
+        cuticleColor: design.cuticleColor?.value, // цвет кожи клиента
         createdAt: DateTime.now(),
       ));
+      if (mounted) {
+        TopMessage.show(context, 'Дизайн в коллекции ✓', color: Colors.green);
+      }
     }
   }
 
   /// Сохранить примерку в существующий визит (без создания нового).
   /// Вызывается, когда пришли из карточки клиента (targetSession != null).
+  /// После сохранения — возврат в карточку: мастер видит свежее фото сразу.
   Future<void> _saveToExistingSession() async {
     final session = widget.targetSession;
     if (session == null) return;
@@ -231,15 +236,16 @@ class _ResultScreenState extends State<ResultScreen> {
       );
       await DatabaseService.updateSession(updated);
       if (mounted) {
-        TopMessage.show(context, 'Примерка сохранена в визит',
+        TopMessage.show(context, 'Примерка сохранена в визит ✓',
             color: Colors.green);
+        // Возврат в карточку клиента — там продолжение потока (видео)
+        Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
         TopMessage.show(context, 'Ошибка при сохранении: $e');
+        setState(() => _isSaving = false);
       }
-    } finally {
-      setState(() => _isSaving = false);
     }
   }
 
@@ -249,7 +255,7 @@ class _ResultScreenState extends State<ResultScreen> {
     final selected = await showDialog<Client>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Сохранить клиенту', style: TextStyle(fontSize: 20)),
+        title: const Text('Сохранить клиенту'),
         content: SizedBox(
           width: double.maxFinite,
           child: ConstrainedBox(
@@ -259,7 +265,7 @@ class _ResultScreenState extends State<ResultScreen> {
               children: [
                 ListTile(
                   leading:
-                      const Icon(Icons.person_add, color: Colors.pink, size: 28),
+                      const Icon(Icons.person_add, color: AppColors.cyan, size: 28),
                   title: const Text('Новый клиент',
                       style: TextStyle(fontSize: 18)),
                   onTap: () => Navigator.pop(
@@ -270,7 +276,7 @@ class _ResultScreenState extends State<ResultScreen> {
                 const Divider(),
                 ...clients.map((c) => ListTile(
                       leading: CircleAvatar(
-                        backgroundColor: Colors.pink,
+                        backgroundColor: AppColors.wine,
                         child: Text(
                           c.name.isNotEmpty ? c.name[0].toUpperCase() : '?',
                           style: const TextStyle(color: Colors.white),
@@ -301,7 +307,7 @@ class _ResultScreenState extends State<ResultScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Новый клиент', style: TextStyle(fontSize: 20)),
+        title: const Text('Новый клиент'),
         content: TextField(
           controller: nameController,
           decoration: const InputDecoration(
@@ -329,6 +335,8 @@ class _ResultScreenState extends State<ResultScreen> {
     return null;
   }
 
+  /// Сохранение клиенту + АВТОПЕРЕХОД в карточку клиента:
+  /// там мастер видит визит и получает авто-подсказку «сделать видео».
   Future<void> _saveToClient() async {
     setState(() => _isSaving = true);
 
@@ -361,12 +369,88 @@ class _ResultScreenState extends State<ResultScreen> {
         beforePhotoPath: beforePath,
         tryOnPhotoPath: tryOnPath,
       );
+
+      if (mounted) {
+        TopMessage.show(context, 'Сохранено в карточку клиента ✓',
+            color: Colors.green);
+        // Логичное продолжение потока: карточка клиента,
+        // где авто-подсказка предложит сделать видео
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ClientDetailScreen(client: client),
+          ),
+        );
+        setState(() => _isSaving = false);
+      }
     } catch (e) {
       if (mounted) {
         TopMessage.show(context, 'Ошибка при сохранении: $e');
+        setState(() => _isSaving = false);
       }
-    } finally {
-      setState(() => _isSaving = false);
+    }
+  }
+
+  /// Видео собирается из сохранённых визитов (минимум 2 фото).
+  /// - Если пришли из карточки клиента (targetSession != null) →
+  ///   идём в AnimationScreen сразу с этим визитом
+  /// - Если визита ещё нет → предлагаем сохранить клиенту;
+  ///   после сохранения откроется карточка, где уже будет кнопка Видео
+  Future<void> _makeVideo() async {
+    final session = widget.targetSession;
+
+    if (session == null) {
+      // Нет визита — просим сохранить клиенту, а потом видео сделаем
+      // уже из карточки клиента (там авто-предложение после сохранения)
+      final save = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Сделать видео'),
+          content: const Text(
+            'Видео собирается из сохранённых визитов.\n\n'
+            'Сначала сохранить примерку клиенту — а потом из карточки '
+            'сделать ролик «До → Примерка»?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Отмена'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Сохранить клиенту'),
+            ),
+          ],
+        ),
+      );
+      if (save == true) {
+        // _saveToClient откроет карточку клиента, где уже есть кнопка Видео
+        await _saveToClient();
+      }
+      return;
+    }
+
+    // Визит есть — проверяем, что в нём минимум 2 фото
+    final hasEnough = [session.hasBefore, session.hasTryOn, session.hasAfter]
+            .where((b) => b)
+            .length >=
+        2;
+    if (!hasEnough) {
+      TopMessage.show(
+        context,
+        'Для видео нужно минимум 2 фото в визите',
+        color: Colors.orange,
+      );
+      return;
+    }
+
+    if (mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AnimationScreen(session: session),
+        ),
+      );
     }
   }
 
@@ -374,14 +458,11 @@ class _ResultScreenState extends State<ResultScreen> {
   Widget build(BuildContext context) {
     final render = design.getRender();
     final tablet = Responsive.isTablet(context);
+    final compact = Responsive.isCompact(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Результат', style: TextStyle(fontSize: 22)),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Colors.white,
-        // Бургер-меню: Клиенты / Мои дизайны / На главный.
-        // Отдельная кнопка «домой» убрана — она внутри меню.
+        title: const Text('Результат'),
         actions: const [QuickMenuButton()],
       ),
       body: Stack(
@@ -414,7 +495,7 @@ class _ResultScreenState extends State<ResultScreen> {
             ),
           ),
 
-          // Панель поверх (на планшете — центрирована)
+          // Панель действий: navy-градиент, единый язык кнопок 2×2
           Positioned(
             bottom: 0,
             left: 0,
@@ -425,128 +506,173 @@ class _ResultScreenState extends State<ResultScreen> {
                   maxWidth: tablet ? 720 : double.infinity,
                 ),
                 child: Container(
-                  color: Colors.black87,
+                  decoration: const BoxDecoration(
+                    gradient: AppGradients.darkPanel,
+                  ),
                   padding: EdgeInsets.all(Responsive.pad(context)),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            width: 20,
-                            height: 20,
-                            decoration: BoxDecoration(
-                              color: render.color,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              '${design.color?.name ?? 'Цвет'} • ${design.density.toInt()} сл. • ${NailPattern.getTypeName(design.pattern.type)}',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: Responsive.fs(context, 16),
-                                fontWeight: FontWeight.bold,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: tablet ? 16 : 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () => Navigator.pop(context),
-                              style: OutlinedButton.styleFrom(
-                                padding: EdgeInsets.symmetric(
-                                    vertical: tablet ? 16 : 14),
-                                foregroundColor: Colors.white,
-                                side: const BorderSide(color: Colors.white),
-                              ),
-                              child: Text('← Назад',
-                                  style: TextStyle(
-                                      fontSize: Responsive.fs(context, 16))),
-                            ),
-                          ),
-                          SizedBox(width: tablet ? 16 : 12),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: _isSaving
-                                  ? null
-                                  : (widget.targetSession != null
-                                      ? _saveToExistingSession
-                                      : _saveToClient),
-                              icon: _isSaving
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2),
-                                    )
-                                  : const Icon(Icons.person_pin),
-                              label: Text(
-                                  _isSaving
-                                      ? 'Сохранение...'
-                                      : (widget.targetSession != null
-                                          ? 'Сохранить в визит'
-                                          : 'Сохранить клиенту'),
-                                  style: TextStyle(
-                                      fontSize: Responsive.fs(context, 15))),
-                              style: ElevatedButton.styleFrom(
-                                padding: EdgeInsets.symmetric(
-                                    vertical: tablet ? 16 : 14),
+                  child: SafeArea(
+                    top: false,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Сводка дизайна
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 18,
+                              height: 18,
+                              decoration: BoxDecoration(
+                                color: render.color,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                    color: AppColors.onDarkSoft, width: 1),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: tablet ? 12 : 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: _saveToCollection,
-                              icon: const Icon(Icons.bookmark_add),
-                              label: Text('В коллекцию',
-                                  style: TextStyle(
-                                      fontSize: Responsive.fs(context, 14))),
-                              style: OutlinedButton.styleFrom(
-                                padding: EdgeInsets.symmetric(
-                                    vertical: tablet ? 14 : 12),
-                                foregroundColor: Colors.white,
-                                side: const BorderSide(color: Colors.white54),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                '${design.color?.name ?? 'Цвет'} • ${design.density.toInt()} сл. • ${NailPattern.getTypeName(design.pattern.type)}',
+                                style: TextStyle(
+                                  color: AppColors.onDark,
+                                  fontSize: Responsive.fs(context, 15),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                          ),
-                          SizedBox(width: tablet ? 12 : 8),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: _isSaving ? null : _saveToGallery,
-                              icon: const Icon(Icons.download),
-                              label: Text('В галерею',
-                                  style: TextStyle(
-                                      fontSize: Responsive.fs(context, 14))),
-                              style: OutlinedButton.styleFrom(
-                                padding: EdgeInsets.symmetric(
-                                    vertical: tablet ? 14 : 12),
-                                foregroundColor: Colors.white,
-                                side: const BorderSide(color: Colors.white54),
+                          ],
+                        ),
+                        SizedBox(height: tablet ? 14 : 10),
+
+                        // РЯД 1: сохранить клиенту (градиент, шире) + видео
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: SizedBox(
+                                height: compact ? 50 : 56,
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    gradient: AppGradients.cta,
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: ElevatedButton.icon(
+                                    onPressed: _isSaving
+                                        ? null
+                                        : (widget.targetSession != null
+                                            ? _saveToExistingSession
+                                            : _saveToClient),
+                                    icon: _isSaving
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Colors.white),
+                                          )
+                                        : const Icon(Icons.person_pin, size: 22),
+                                    label: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        _isSaving
+                                            ? 'Сохранение...'
+                                            : (widget.targetSession != null
+                                                ? 'Сохранить в визит'
+                                                : 'Сохранить клиенту'),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.transparent,
+                                      shadowColor: Colors.transparent,
+                                      shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(14)),
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
+                            SizedBox(width: tablet ? 10 : 8),
+                            Expanded(
+                              flex: 2,
+                              child: _panelButton(
+                                icon: Icons.movie_creation_outlined,
+                                label: 'Видео',
+                                onTap: _isSaving ? null : _makeVideo,
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: tablet ? 10 : 8),
+
+                        // РЯД 2: коллекция + галерея (по 2 кнопки в ряду,
+                        // шрифт крупный — места теперь хватает)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _panelButton(
+                                icon: Icons.bookmark_add_outlined,
+                                label: 'В коллекцию',
+                                onTap: _saveToCollection,
+                              ),
+                            ),
+                            SizedBox(width: tablet ? 10 : 8),
+                            Expanded(
+                              child: _panelButton(
+                                icon: Icons.download_outlined,
+                                label: 'В галерею',
+                                onTap: _isSaving ? null : _saveToGallery,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Outline-кнопка второго ряда: светлый контур на navy, текст не режется
+  Widget _panelButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onTap,
+  }) {
+    final compact = Responsive.isCompact(context);
+    return SizedBox(
+      height: compact ? 50 : 56,
+      child: OutlinedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: compact ? 18 : 22),
+        label: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: compact ? 14 : 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.onDark,
+          side: const BorderSide(color: AppColors.onDarkSoft, width: 1.2),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
       ),
     );
   }

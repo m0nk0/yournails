@@ -10,6 +10,9 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Шрифты дизайн-системы (Unbounded + Golos Text, кириллица)
+  google_fonts: ^6.2.1
+
   # Иконки
   cupertino_icons: ^1.0.8
 
@@ -58,7 +61,7 @@ dev_dependencies:
   # Генерация иконки приложения
   flutter_launcher_icons: ^0.13.1
 
-  # Нативный splash screen
+  # Генерация нативного сплэша (пакет, версия обязательна)
   flutter_native_splash: ^2.4.0
 
 flutter:
@@ -70,16 +73,21 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: false
+  # Иконка: розовый логотип на navy-фоне (премиальный контраст)
   image_path: "assets/icon/icon.png"
-  adaptive_icon_background: "#FDEEF3"
+  adaptive_icon_background: "#1C1C28"
   adaptive_icon_foreground: "assets/icon/icon.png"
 
+# КОНФИГ сплэша — верхний уровень, один блок
 flutter_native_splash:
-  color: "#FDEEF3"
+  # Однотонный премиальный navy: логотип вспыхивает на тёмном
+  color: "#1C1C28"
 
   android: true
   ios: false
   web: false
 
+  # Android 12+: системный сплэш = фон + иконка приложения
   android_12:
-    color: "#FDEEF3"
+    color: "#1C1C28"
+    icon_background_color: "#1C1C28"

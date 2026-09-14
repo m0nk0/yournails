@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'screens/home_screen.dart';
 import 'screens/master_onboarding_screen.dart';
 import 'services/database_service.dart';
+import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,10 +24,7 @@ class YourNailsApp extends StatelessWidget {
     return MaterialApp(
       title: 'Твои Ноготочки',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.pink),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.light,
       home: showOnboarding ? const MasterOnboardingScreen() : const HomeScreen(),
     );
   }

@@ -9,6 +9,7 @@ import '../models/nail_shape.dart';
 import '../models/selected_design.dart';
 import '../services/database_service.dart';
 import '../library/unified_library_service.dart';
+import '../theme/app_theme.dart';
 import '../widgets/home_app_bar.dart';
 import '../widgets/nail_3d_renderer.dart';
 
@@ -50,7 +51,7 @@ class _MyDesignsScreenState extends State<MyDesignsScreen> {
     final source = await showDialog<ImageSource>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Загрузить дизайн', style: TextStyle(fontSize: 20)),
+        title: const Text('Загрузить дизайн'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -70,14 +71,15 @@ class _MyDesignsScreenState extends State<MyDesignsScreen> {
     );
     if (source == null) return;
 
-    final XFile? photo = await _picker.pickImage(source: source, imageQuality: 90);
+    final XFile? photo =
+        await _picker.pickImage(source: source, imageQuality: 90);
     if (photo == null) return;
 
     final nameController = TextEditingController(text: 'Мой дизайн');
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Название дизайна', style: TextStyle(fontSize: 20)),
+        title: const Text('Название дизайна'),
         content: TextField(
           controller: nameController,
           decoration: const InputDecoration(labelText: 'Название'),
@@ -86,18 +88,19 @@ class _MyDesignsScreenState extends State<MyDesignsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена', style: TextStyle(fontSize: 16)),
+            child: const Text('Отмена'),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Сохранить', style: TextStyle(fontSize: 16)),
+            child: const Text('Сохранить'),
           ),
         ],
       ),
     );
 
     if (ok == true && nameController.text.trim().isNotEmpty) {
-      final savedPath = await DatabaseService.savePhoto(File(photo.path), 'pattern');
+      final savedPath =
+          await DatabaseService.savePhoto(File(photo.path), 'pattern');
       await DatabaseService.addMyDesign(MyDesign(
         id: const Uuid().v4(),
         name: nameController.text.trim(),
@@ -114,20 +117,17 @@ class _MyDesignsScreenState extends State<MyDesignsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Удалить дизайн?', style: TextStyle(fontSize: 20)),
-        content: Text(
-          '"${d.name}" будет удалён из коллекции.',
-          style: const TextStyle(fontSize: 16),
-        ),
+        title: const Text('Удалить дизайн?'),
+        content: Text('"${d.name}" будет удалён из коллекции.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена', style: TextStyle(fontSize: 16)),
+            child: const Text('Отмена'),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Удалить', style: TextStyle(fontSize: 16)),
+            child: const Text('Удалить'),
           ),
         ],
       ),
@@ -144,7 +144,7 @@ class _MyDesignsScreenState extends State<MyDesignsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(d.name, style: const TextStyle(fontSize: 22)),
+        title: Text(d.name, style: const TextStyle(fontSize: 20)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -170,16 +170,16 @@ class _MyDesignsScreenState extends State<MyDesignsScreen> {
               _detailRow('Форма', NailShapeHelper.getName(d.shape)),
               _detailRow('Слои', '${d.density.toInt()}'),
             ] else
-              const Text(
+              Text(
                 'Загруженная картинка',
-                style: TextStyle(fontSize: 16, color: Colors.grey),
+                style: TextStyle(fontSize: 16, color: AppColors.inkSoft),
               ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Закрыть', style: TextStyle(fontSize: 16)),
+            child: const Text('Закрыть'),
           ),
         ],
       ),
@@ -192,10 +192,10 @@ class _MyDesignsScreenState extends State<MyDesignsScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(fontSize: 17, color: Colors.grey[600])),
+          Text(label, style: TextStyle(fontSize: 16, color: AppColors.inkSoft)),
           Text(
             value,
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -275,26 +275,31 @@ class _MyDesignsScreenState extends State<MyDesignsScreen> {
     final isWide = MediaQuery.of(context).size.width > 600;
 
     return Scaffold(
-            appBar: const HomeAppBar(
-        title: Text('Мои дизайны', style: TextStyle(fontSize: 24)),
-        backgroundColor: Colors.deepPurple,
+      // AppBar берёт цвет из темы (wine) и заголовок Unbounded — без
+      // переопределений. Бургер-меню добавляется автоматически через HomeAppBar.
+      appBar: HomeAppBar(
+        title: const Text('Мои дизайны'),
       ),
       body: _designs.isEmpty
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.bookmark_border, size: 100, color: Colors.grey[400]),
+                  Icon(Icons.bookmarks,
+                      size: 100, color: AppColors.inkSoft),
                   const SizedBox(height: 20),
                   Text(
                     'Коллекция пуста',
-                    style: TextStyle(fontSize: 24, color: Colors.grey[600]),
+                    style: TextStyle(
+                        fontSize: 22,
+                        color: AppColors.ink,
+                        fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Сохраняйте удачные дизайны\nи загружайте картинки из интернета',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 17, color: Colors.grey),
+                    style: TextStyle(fontSize: 16, color: AppColors.inkSoft),
                   ),
                 ],
               ),
@@ -345,7 +350,7 @@ class _MyDesignsScreenState extends State<MyDesignsScreen> {
                           Icon(
                             d.isRecipe ? Icons.bookmark : Icons.image,
                             size: 14,
-                            color: Colors.grey[600],
+                            color: AppColors.inkSoft,
                           ),
                           const SizedBox(width: 4),
                           Expanded(
@@ -369,7 +374,8 @@ class _MyDesignsScreenState extends State<MyDesignsScreen> {
             ),
       floatingActionButton: FloatingActionButton(
         onPressed: _uploadImage,
-        backgroundColor: Colors.deepPurple,
+        backgroundColor: AppColors.cyan,
+        tooltip: 'Загрузить дизайн',
         child: const Icon(Icons.add, color: Colors.white, size: 32),
       ),
     );

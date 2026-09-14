@@ -113,7 +113,7 @@ class LibraryService {
     return getCustomColors();
   }
 
-  // ============ МАТЕРИАЛЫ (задел на Этап 2) ============
+  // ============ МАТЕРИАЛЫ ============
 
   static Future<List<NailMaterial>> getCustomMaterials() async {
     await init();
@@ -149,5 +149,54 @@ class LibraryService {
     await init();
     (_m!['materials'] as List).removeWhere((e) => e['id'] == id);
     await _save();
+  }
+
+  // ============ ЭКСПОРТ / ИМПОРТ (3.4) ============
+
+  /// Сырые секции пользовательского контента для экспорта (копии).
+  static Future<Map<String, dynamic>> exportSections() async {
+    await init();
+    return {
+      'colors': List<dynamic>.from(_m!['colors'] as List),
+      'materials': List<dynamic>.from(_m!['materials'] as List),
+    };
+  }
+
+  /// Импорт цветов и материалов С СОХРАНЕНИЕМ ID (иначе рецепты
+  /// потеряют ссылки) и без дублей. Возвращает счётчики добавленного.
+  static Future<Map<String, int>> importSections({
+    required List<dynamic> colors,
+    required List<dynamic> materials,
+  }) async {
+    await init();
+
+    final existingColors = <dynamic>{
+      for (final e in (_m!['colors'] as List)) e['id']
+    };
+    int addedColors = 0;
+    for (final e in colors) {
+      if (e is! Map) continue;
+      final id = e['id'];
+      if (id == null || existingColors.contains(id)) continue;
+      (_m!['colors'] as List).add(e);
+      existingColors.add(id);
+      addedColors++;
+    }
+
+    final existingMaterials = <dynamic>{
+      for (final e in (_m!['materials'] as List)) e['id']
+    };
+    int addedMaterials = 0;
+    for (final e in materials) {
+      if (e is! Map) continue;
+      final id = e['id'];
+      if (id == null || existingMaterials.contains(id)) continue;
+      (_m!['materials'] as List).add(e);
+      existingMaterials.add(id);
+      addedMaterials++;
+    }
+
+    await _save();
+    return {'colors': addedColors, 'materials': addedMaterials};
   }
 }

@@ -10,6 +10,7 @@ import 'edit_screen.dart';
 import 'my_designs_screen.dart';
 import 'manage_masters_screen.dart';
 import 'crm_screen.dart';
+import 'library_tools_screen.dart';
 import '../services/tryon_session_service.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -102,6 +103,14 @@ class HomeScreen extends StatelessWidget {
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.cloud_done_outlined, size: 26),
+            tooltip: 'Бэкап библиотеки',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const LibraryToolsScreen()),
+            ),
+          ),
           TextButton.icon(
             onPressed: () => Navigator.push(
               context,

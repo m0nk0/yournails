@@ -121,8 +121,28 @@ class UnifiedLibraryService {
 
   /// Удалить пользовательский материал + сброс кэша.
   static Future<void> deleteCustomMaterial(String id) async {
-    await LibraryService.deleteCustomMaterial(id);
+    final result = await LibraryService.deleteCustomMaterial(id);
     invalidateCache();
+  }
+
+  // ============ ЭКСПОРТ / ИМПОРТ (3.4) ============
+
+  /// Сырые секции пользовательского контента для экспорта (копии).
+  static Future<Map<String, dynamic>> exportSections() async {
+    return LibraryService.exportSections();
+  }
+
+  /// Импорт цветов и материалов с сохранением ID и без дублей + сброс кэша.
+  static Future<Map<String, int>> importSections({
+    required List<dynamic> colors,
+    required List<dynamic> materials,
+  }) async {
+    final result = await LibraryService.importSections(
+      colors: colors,
+      materials: materials,
+    );
+    invalidateCache();
+    return result;
   }
 
   // ============ АСИНХРОННЫЙ API ============
